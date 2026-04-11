@@ -21,7 +21,7 @@ class BaseModel(Model):
         database = db
 
 class Trout(BaseModel):
-    id = UUIDField(unique=True, default=uuid.uuid4())
+    id = AutoField()
     target = TextField()
     actor = TextField()
     url = TextField()
@@ -29,7 +29,7 @@ class Trout(BaseModel):
         default=datetime.datetime.now,
         index=True)
 class User(BaseModel):
-    id = UUIDField(unique=True, default=uuid.uuid4())
+    id = AutoField()
     user_id = TextField(unique=True)
     trouted_count = IntegerField(default=0)
     trouter_count = IntegerField(default=0)
@@ -40,7 +40,7 @@ class User(BaseModel):
 print("Connecting to database")
 db.connect()
 print("Creating tables")
-db.create_tables([Trout])
+db.create_tables([Trout, User])
 print("Done")
 
 @app.command("/trout")
@@ -87,7 +87,7 @@ def respond_t(ack, command, client, body):
                     "elements": [
                         {
                             "type": "mrkdwn",
-                            "text": f"whacker: <@{body["user_id"]}> | view leaderboard | view all trouts"
+                            "text": f"whacker: <@{body["user_id"]}> | <{os.getenv("TROUT_LOGS_CHANNEL")}|view all trouts>"
                         }
                     ]
                 }
@@ -99,25 +99,40 @@ def respond_t(ack, command, client, body):
     )
     target_id = split_command[0][2:14]
     Trout.create(target=target_id, actor=body["user_id"], url=split_command[1][1:-1])
-    if (not User.select().where(User.user_id == body["user_id"])):
-        print("actor does not exist, creating a user.")
-        User.create(user_id=body["user_id"])
-    if (not User.select().where(User.user_id == target_id)):
-        print("target does not exist, creating a user.")
-        User.create(user_id=target_id)
-    actor = User.get(user_id=body["user_id"])
+    actor = User.get_or_create(user_id=body["user_id"])
     actor.trouter_count += 1
     actor.save()
-    target = User.get(user_id=target_id)
+    target = User.get_or_create(user_id=target_id)
     target.trouted_count += 1
     target.save()
 
 @app.command("/trout-leaderboard")
-def respond_tl(ack, command, client, body):
+def respond_tl(ack, client, body):
     ack()
-    split_command = command["text"].split(" ")
-    out = "#Trout Board\n##Trouted "
-    for user in User.select().order_by(User.trouted_count)
+    trouted_out = "#The Trouted\n"
+    index = 0
+    for user in User.select().order_by(User.trouted_count.desc()).limit(10):
+        trouted_out += f"{index}. <@{user.user_id}> - `{user.trouted_count}`\n"
+        index += 1
+    whackers_out = "#The Whackers\n"
+    index = 0
+    for user in User.select().order_by(User.trouter_count.desc()).limit(10):
+        whackers_out += f"{index}. <@{user.user_id}> - `{user.trouter_count}`\n"
+        index += 1
+    client.chat_postMessage(
+        channel=body["channel_id"],
+        blocks=[
+            {
+                "type": "markdown",
+                "text": whackers_out
+            }
+	    ]
+    )
+
+@app.command("/trout-count")
+def respond_tc(ack, client, body):
+    ack()
+
 
 
 # Start your app
