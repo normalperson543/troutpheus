@@ -132,7 +132,22 @@ def respond_tl(ack, client, body):
 @app.command("/trout-count")
 def respond_tc(ack, client, body):
     ack()
+    received_user = User.get_or_create(user_id=body["user_id"])
+    client.chat_postMessage(
+        channel = body["channel_id"],
+        message = f"<@{received_user.user_id}> has been trouted `{received_user.trouted_count}` times and trouted others `{received_user.trouter_count}` times."
+    )
 
+@app.command("/trout-user-log")
+def respond_tul(ack, command, client, body):
+    ack()
+    split_command = command["text"].split(" ")
+    received_user = User.get_or_create(user_id=body["user_id"])
+    trouted_out = f"#Trout user log\nFor <@{received_user.user_id}> (trouted by {received_user.trouted_count}), trouted ${received_user.trouter_count} others) - last 10 trouts\n"
+    index = 0
+    for trout in Trout.select().where().order_by(Trout.timestamp.desc()).limit(10):
+        trouted_out += f":trouted: {trout} *whacked* by a wet trout (<{split_command[1][1:-1]}|message>) (whacker: <@{body["user_id"]}>)\n"
+        index += 1
 
 
 # Start your app
