@@ -15,9 +15,36 @@ COMMIT_ID = os.getenv("SOURCE_COMMIT")
 
 db = PostgresqlExtDatabase(os.getenv("DATABASE_URL"))
 
+class BaseModel(Model):
+    """All models inherit this to share the database connection."""
+    class Meta:
+        database = db
+
+class Trout(BaseModel):
+    id = UUIDField(unique=True, default=uuid.uuid4())
+    target = TextField()
+    actor = TextField()
+    url = TextField()
+    timestamp = DateTimeField(
+        default=datetime.datetime.now,
+        index=True)
+class User(BaseModel):
+    id = UUIDField(unique=True, default=uuid.uuid4())
+    user_id = TextField(unique=True)
+    trouted_count = IntegerField(default=0)
+    trouter_count = IntegerField(default=0)
+    timestamp = DateTimeField(
+        default=datetime.datetime.now,
+        index=True)
+
+print("Connecting to database")
+db.connect()
+print("Creating tables")
+db.create_tables([Trout])
+print("Done")
 
 @app.command("/trout")
-def respond_t(ack, respond, command, client, body):
+def respond_t(ack, command, client, body):
     # Acknowledge command request
     ack()
     #print(f"{command["text"]}")
@@ -27,6 +54,8 @@ def respond_t(ack, respond, command, client, body):
     pattern = r"^https:\/\/[\w-]+\.slack\.com\/archives\/([CGD][A-Z0-9]+)\/p(\d+)$"
 
     pat = re.compile(pattern)
+    if (not split_command[0]):
+        print("Help")
     if (split_command[1] and re.match(pat, split_command[1])):
         client.chat_postEphemeral(
             channel=body["channel_id"],
@@ -34,7 +63,6 @@ def respond_t(ack, respond, command, client, body):
             text=":trouted: *Whack!* That's not a valid message link! Try copying the message link again."
         )
         exit()
-    print(f"{split_command[0]} has been *whacked* by a wet trout for <{split_command[1][1:-1]}|this message>.\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.")
     client.chat_postMessage(
             channel=body["channel_id"],
             blocks=[
@@ -46,7 +74,7 @@ def respond_t(ack, respond, command, client, body):
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"{split_command[0]} has been *whacked* by a wet trout for <{split_command[1][1:-1]}|this message>.\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly."
+                        "text": f"{split_command[0]} has been *whacked* by a wet trout (<{split_command[1][1:-1]}|message>)\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly."
                     },
                     "accessory": {
                         "type": "image",
@@ -65,6 +93,32 @@ def respond_t(ack, respond, command, client, body):
                 }
             ]
         )
+    client.chat_postMessage(
+        channel=os.getenv("TROUT_LOGS_CHANNEL"),
+        text=f":trouted: {split_command[0]} *whacked* by a wet trout (<{split_command[1][1:-1]}|message>) (whacker: <@{body["user_id"]}>)"
+    )
+    target_id = split_command[0][2:14]
+    Trout.create(target=target_id, actor=body["user_id"], url=split_command[1][1:-1])
+    if (not User.select().where(User.user_id == body["user_id"])):
+        print("actor does not exist, creating a user.")
+        User.create(user_id=body["user_id"])
+    if (not User.select().where(User.user_id == target_id)):
+        print("target does not exist, creating a user.")
+        User.create(user_id=target_id)
+    actor = User.get(user_id=body["user_id"])
+    actor.trouter_count += 1
+    actor.save()
+    target = User.get(user_id=target_id)
+    target.trouted_count += 1
+    target.save()
+
+@app.command("/trout-leaderboard")
+def respond_tl(ack, command, client, body):
+    ack()
+    split_command = command["text"].split(" ")
+    out = "#Trout Board\n##Trouted "
+    for user in User.select().order_by(User.trouted_count)
+
 
 # Start your app
 if __name__ == "__main__":
