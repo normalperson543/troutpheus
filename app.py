@@ -24,8 +24,9 @@ class Trout(BaseModel):
     id = AutoField()
     target = TextField()
     actor = TextField()
-    thread_id = TextField()
-    channel_id = TextField()
+    thread_id = TextField(default="")
+    channel_id = TextField(default="")
+    reason = TextField(default="")
     timestamp = DateTimeField(
         default=datetime.datetime.now,
         index=True)
@@ -51,35 +52,25 @@ def respond_t(ack, command, client, body, respond):
     ack()
 
     split_command = command["text"].split(" ")
-    pattern = r"^https:\/\/[\w-]+\.slack\.com\/archives\/([CGD][A-Z0-9]+)\/p(\d+)$"
+    pattern = r"^<https:\/\/[\w-]+\.slack\.com\/archives\/([CGD][A-Z0-9]+)\/p(\d+)>$"
     channel_id = ""
     thread_id = ""
-
+    reason = ""
+    url = ""
     pat = re.compile(pattern)
-    if (split_command.length == 0):
-        if body["channel_id"]:
-            channel_id = body["channel_id"]
-        else:
-            respond("Whoops! Looks like troutpheus couldn't get the channel ID. Try copying the link of the message, and run `/trout [MESSAGE LINK]`.")
-        if (body["thread_ts"]):
-            thread_id = body["thread_ts"]
-        else:
-            respond("Whoops! Looks like troutpheus couldn't get the thread ID. Try copying the link of the message, and run `/trout [MESSAGE LINK]`.")
-    elif re.match(pat, split_command[1]):
-        respond(
-            text=":trouted: *Whack!* That's not a valid message link! Try copying the message link again."
-        )
-        exit()
-    elif (re.matc)
+    if (len(split_command) == 0):
+        respond("help")
+    elif not re.match(pat, split_command[1]):
+        reason = " ".join(split_command[1:])
     respond(
         response_type="in_channel",
-        text=f"{split_command[0]} has been *whacked* by a wet trout (<{split_command[1][1:-1]}|message>)\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.",
+        text=f"{split_command[0]} has been *whacked* by a wet trout ({reason if len(reason) > 0 else f"<{url}|message>"})\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.",
         blocks=[
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"*Whack!* {split_command[0]} has been *whacked* by a wet trout (<{split_command[1][1:-1]}|message>)\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly."
+                    "text": f"*Whack!* {split_command[0]} has been *whacked* by a wet trout ({reason if len(reason) > 0 else f"<{url}|message>"})\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly."
                 },
                 "accessory": {
                     "type": "image",
@@ -104,7 +95,7 @@ def respond_t(ack, command, client, body, respond):
     )
     target_id = split_command[0][2:13]
     print(body["user_id"])
-    Trout.create(target=target_id, actor=body["user_id"], url=split_command[1][1:-1])
+    Trout.create(target=target_id, actor=body["user_id"], channel_id=channel_id, thread_id=thread_id, reason=reason)
     actor, created = User.get_or_create(user_id=body["user_id"])
     actor.trouter_count += 1
     actor.save()
@@ -155,7 +146,8 @@ def respond_tul(ack, command, respond, body):
     received_user = User.get(user_id=body["user_id"])
     trouted_out = f"*:trouted: Trout user log*\nFor <@{received_user.user_id}> (trouted by `{received_user.trouted_count}`, trouted `{received_user.trouter_count}` others) - last 10 trouts\n\n"
     for trout in Trout.select().where(Trout.target == split_command[0][2:13]).order_by(Trout.timestamp.desc()).limit(10):
-        trouted_out += f":trouted: {trout.target} *whacked* by a wet trout (<{trout.url}|message>) (whacker: <@{trout.actor}>)\n"
+        url = f"{os.getenv("WS_ROOT_URL")}/archives/{trout.channel_id}/{trout.thread_id}"
+        trouted_out += f":trouted: {trout.target} *whacked* by a wet trout (<{url}|message>) (whacker: <@{trout.actor}>)\n"
     respond(
         response_type="in_channel",
         text = trouted_out
