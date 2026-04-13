@@ -24,12 +24,14 @@ class Trout(BaseModel):
     id = AutoField()
     target = TextField()
     actor = TextField()
-    url = TextField()
+    thread_id = TextField()
+    channel_id = TextField()
     timestamp = DateTimeField(
         default=datetime.datetime.now,
         index=True)
 class User(BaseModel):
     id = AutoField()
+    username = TextField(default="")
     user_id = TextField(unique=True)
     trouted_count = IntegerField(default=0)
     trouter_count = IntegerField(default=0)
@@ -44,110 +46,120 @@ db.create_tables([Trout, User])
 print("Done")
 
 @app.command("/trout")
-def respond_t(ack, command, client, body):
+def respond_t(ack, command, client, body, respond):
     # Acknowledge command request
     ack()
-    #print(f"{command["text"]}")
-    #respond(f"{command['text']}")
 
     split_command = command["text"].split(" ")
     pattern = r"^https:\/\/[\w-]+\.slack\.com\/archives\/([CGD][A-Z0-9]+)\/p(\d+)$"
+    channel_id = ""
+    thread_id = ""
 
     pat = re.compile(pattern)
-    if (not split_command[0]):
-        print("Help")
-    if (split_command[1] and re.match(pat, split_command[1])):
-        client.chat_postEphemeral(
-            channel=body["channel_id"],
-            user=body["user_id"],
+    if (split_command.length == 0):
+        if body["channel_id"]:
+            channel_id = body["channel_id"]
+        else:
+            respond("Whoops! Looks like troutpheus couldn't get the channel ID. Try copying the link of the message, and run `/trout [MESSAGE LINK]`.")
+        if (body["thread_ts"]):
+            thread_id = body["thread_ts"]
+        else:
+            respond("Whoops! Looks like troutpheus couldn't get the thread ID. Try copying the link of the message, and run `/trout [MESSAGE LINK]`.")
+    elif re.match(pat, split_command[1]):
+        respond(
             text=":trouted: *Whack!* That's not a valid message link! Try copying the message link again."
         )
         exit()
-    client.chat_postMessage(
-            channel=body["channel_id"],
-            blocks=[
-                {
-                    "type": "markdown",
-                    "text": "## Whack!"
+    elif (re.matc)
+    respond(
+        response_type="in_channel",
+        text=f"{split_command[0]} has been *whacked* by a wet trout (<{split_command[1][1:-1]}|message>)\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.",
+        blocks=[
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Whack!* {split_command[0]} has been *whacked* by a wet trout (<{split_command[1][1:-1]}|message>)\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly."
                 },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"{split_command[0]} has been *whacked* by a wet trout (<{split_command[1][1:-1]}|message>)\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly."
-                    },
-                    "accessory": {
-                        "type": "image",
-                        "image_url": "https://user-cdn.hackclub-assets.com/019d711a-37ab-7422-a375-b7bcd3629304/Rainbow_trout_transparent.png",
-                        "alt_text": "rainbow trout"
-                    }
-                },
-                {
-                    "type": "context",
-                    "elements": [
-                        {
-                            "type": "mrkdwn",
-                            "text": f"whacker: <@{body["user_id"]}> | <{os.getenv("TROUT_LOGS_CHANNEL")}|view all trouts>"
-                        }
-                    ]
+                "accessory": {
+                    "type": "image",
+                    "image_url": "https://user-cdn.hackclub-assets.com/019d711a-37ab-7422-a375-b7bcd3629304/Rainbow_trout_transparent.png",
+                    "alt_text": "rainbow trout"
                 }
-            ]
-        )
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"whacker: <@{body["user_id"]}> | <@{os.getenv("TROUT_LOGS_CHANNEL")}|view all trouts>"
+                    }
+                ]
+            }
+        ]
+    )
     client.chat_postMessage(
         channel=os.getenv("TROUT_LOGS_CHANNEL"),
         text=f":trouted: {split_command[0]} *whacked* by a wet trout (<{split_command[1][1:-1]}|message>) (whacker: <@{body["user_id"]}>)"
     )
-    target_id = split_command[0][2:14]
+    target_id = split_command[0][2:13]
+    print(body["user_id"])
     Trout.create(target=target_id, actor=body["user_id"], url=split_command[1][1:-1])
-    actor = User.get_or_create(user_id=body["user_id"])
+    actor, created = User.get_or_create(user_id=body["user_id"])
     actor.trouter_count += 1
     actor.save()
-    target = User.get_or_create(user_id=target_id)
+    target, created = User.get_or_create(user_id=target_id)
     target.trouted_count += 1
     target.save()
 
 @app.command("/trout-leaderboard")
-def respond_tl(ack, client, body):
+def respond_tl(ack, respond):
     ack()
-    trouted_out = "#The Trouted\n"
-    index = 0
+    out = "*:trouted: The Trouted*\n"
+    index = 1
     for user in User.select().order_by(User.trouted_count.desc()).limit(10):
-        trouted_out += f"{index}. <@{user.user_id}> - `{user.trouted_count}`\n"
+        out += f"{index}. <@{user.user_id}> - `{user.trouted_count}`\n"
         index += 1
-    whackers_out = "#The Whackers\n"
-    index = 0
+    out += "*:trouted: The Whackers*\n"
+    index = 1
     for user in User.select().order_by(User.trouter_count.desc()).limit(10):
-        whackers_out += f"{index}. <@{user.user_id}> - `{user.trouter_count}`\n"
+        out += f"{index}. <@{user.user_id}> - `{user.trouter_count}`\n"
         index += 1
-    client.chat_postMessage(
-        channel=body["channel_id"],
+    respond(
+        response_type="in_channel",
         blocks=[
             {
-                "type": "markdown",
-                "text": whackers_out
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": out
+                }
             }
 	    ]
     )
 
 @app.command("/trout-count")
-def respond_tc(ack, client, body):
+def respond_tc(ack, respond, command, body):
     ack()
-    received_user = User.get_or_create(user_id=body["user_id"])
-    client.chat_postMessage(
-        channel = body["channel_id"],
-        message = f"<@{received_user.user_id}> has been trouted `{received_user.trouted_count}` times and trouted others `{received_user.trouter_count}` times."
+    split_command = command["text"].split(" ")
+    received_user = User.get(user_id=split_command[0][2:13])
+    respond(
+        response_type="in_channel",
+        text = f":trouted: <@{received_user.user_id}> has been trouted `{received_user.trouted_count}` times and trouted others `{received_user.trouter_count}` times."
     )
 
 @app.command("/trout-user-log")
-def respond_tul(ack, command, client, body):
+def respond_tul(ack, command, respond, body):
     ack()
     split_command = command["text"].split(" ")
-    received_user = User.get_or_create(user_id=body["user_id"])
-    trouted_out = f"#Trout user log\nFor <@{received_user.user_id}> (trouted by {received_user.trouted_count}), trouted ${received_user.trouter_count} others) - last 10 trouts\n"
-    index = 0
-    for trout in Trout.select().where().order_by(Trout.timestamp.desc()).limit(10):
-        trouted_out += f":trouted: {trout} *whacked* by a wet trout (<{split_command[1][1:-1]}|message>) (whacker: <@{body["user_id"]}>)\n"
-        index += 1
+    received_user = User.get(user_id=body["user_id"])
+    trouted_out = f"*:trouted: Trout user log*\nFor <@{received_user.user_id}> (trouted by `{received_user.trouted_count}`, trouted `{received_user.trouter_count}` others) - last 10 trouts\n\n"
+    for trout in Trout.select().where(Trout.target == split_command[0][2:13]).order_by(Trout.timestamp.desc()).limit(10):
+        trouted_out += f":trouted: {trout.target} *whacked* by a wet trout (<{trout.url}|message>) (whacker: <@{trout.actor}>)\n"
+    respond(
+        response_type="in_channel",
+        text = trouted_out
+    )
 
 
 # Start your app
