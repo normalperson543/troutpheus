@@ -84,18 +84,19 @@ def respond_t(ack, command, client, body, respond):
         exit()
     target_id = split_command[0][2:]
     target_id = target_id[:target_id.index("|")]
-    print(body["user_id"])
-    Trout.create(target=target_id, actor=body["user_id"], reason=reason)
-    actor, created = User.get_or_create(user_id=body["user_id"])
-    actor.trouter_count += 1
+    actor_id = body["user_id"]
+    Trout.create(target=target_id, actor=actor_id, reason=reason)
+    actor, created = User.get_or_create(user_id=actor_id)
     if len(actor.username) == 0:
-        slack_user = client.users_info(user=body["user_id"])
+        slack_user = client.users_info(user=actor_id)
         actor.username = slack_user["user"]["name"]
+    actor.trouter_count += 1
     actor.save()
+
     target, created = User.get_or_create(user_id=target_id)
     if len(target.username) == 0:
         slack_user = client.users_info(user=target_id)
-        actor.username = slack_user["user"]["name"]
+        target.username = slack_user["user"]["name"]
     target.trouted_count += 1
     target.save()
     respond(
@@ -119,7 +120,7 @@ def respond_t(ack, command, client, body, respond):
                 "elements": [
                     {
                         "type": "mrkdwn",
-                        "text": f"whacker: <@{actor.user_id}> (:trouted:{target.trouted_count}) | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
+                        "text": f"whacker: <@{actor.user_id}> (:trouted:{actor.trouted_count}) | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
                     }
                 ]
             }
@@ -127,7 +128,7 @@ def respond_t(ack, command, client, body, respond):
     )
     client.chat_postMessage(
         channel=os.getenv("TROUT_LOGS_CHANNEL"),
-        text=f":trouted: *{target.username}* ({target.user_id}) (:trouted:{target.trouted_count}) *whacked* by *{actor.username}* ({actor.user_id}) (:trouted:{actor.trouted_count}) with a wet trout\n\n>{reason if len(reason) > 0 else f"<{reason}|message>"}"
+        text=f":trouted: *{target.username}* ({target.user_id}) (:trouted:{target.trouted_count}) *whacked* by *{actor.username}* ({actor.user_id}) (:trouted:{actor.trouted_count}) with a wet trout\n\n>{reason}"
     )
 
 @app.command("/trout-leaderboard")
