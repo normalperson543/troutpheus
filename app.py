@@ -53,24 +53,25 @@ def respond_t(ack, command, client, body, respond):
 
     split_command = command["text"].split(" ")
     pattern = r"^<https:\/\/[\w-]+\.slack\.com\/archives\/([CGD][A-Z0-9]+)\/p(\d+)>$"
-    channel_id = ""
-    thread_id = ""
     reason = ""
-    url = ""
     pat = re.compile(pattern)
     if (len(split_command) == 0):
         respond("help")
     elif not re.match(pat, split_command[1]):
         reason = " ".join(split_command[1:])
+        if len(reason) > 100:
+            respond(f":trouted: *Whack!* Your reason was over 100 characters (it is {len(reason)} characters long). Please edit it so your reason is <= 100 characters.\n\nYou said: ```{reason}```")
+    else:
+        reason = split_command[1][1:-1]
     respond(
         response_type="in_channel",
-        text=f"{split_command[0]} has been *whacked* by a wet trout ({reason if len(reason) > 0 else f"<{url}|message>"})\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.",
+        text=f"{split_command[0]} has been *whacked* by a wet trout ({reason if len(reason) > 0 else f"<{reason}|message>"})\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.",
         blocks=[
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"*Whack!* {split_command[0]} has been *whacked* by a wet trout ({reason if len(reason) > 0 else f"<{url}|message>"})\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly."
+                    "text": f"*Whack!* {split_command[0]} has been *whacked* by a wet trout ({reason if len(reason) > 0 else f"<{reason}|message>"})\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly."
                 },
                 "accessory": {
                     "type": "image",
@@ -91,15 +92,21 @@ def respond_t(ack, command, client, body, respond):
     )
     client.chat_postMessage(
         channel=os.getenv("TROUT_LOGS_CHANNEL"),
-        text=f":trouted: {split_command[0]} *whacked* by a wet trout (<{split_command[1][1:-1]}|message>) (whacker: <@{body["user_id"]}>)"
+        text=f":trouted: {split_command[0]} *whacked* by a wet trout ({reason if len(reason) > 0 else f"<{reason}|message>"}) (whacker: <@{body["user_id"]}>)"
     )
     target_id = split_command[0][2:13]
     print(body["user_id"])
-    Trout.create(target=target_id, actor=body["user_id"], channel_id=channel_id, thread_id=thread_id, reason=reason)
+    Trout.create(target=target_id, actor=body["user_id"], reason=reason)
     actor, created = User.get_or_create(user_id=body["user_id"])
     actor.trouter_count += 1
+    if len(actor.username) == 0:
+        slack_user = client.users_info(user=body["user_id"])
+        actor.username = slack_user["user"]["name"]
     actor.save()
     target, created = User.get_or_create(user_id=target_id)
+    if len(target.username) == 0:
+        slack_user = client.users_info(user=target_id)
+        actor.username = slack_user["user"]["name"]
     target.trouted_count += 1
     target.save()
 
@@ -109,12 +116,12 @@ def respond_tl(ack, respond):
     out = "*:trouted: The Trouted*\n"
     index = 1
     for user in User.select().order_by(User.trouted_count.desc()).limit(10):
-        out += f"{index}. <@{user.user_id}> - `{user.trouted_count}`\n"
+        out += f"{index}. *{user.username}* ({user.user_id}) - `{user.trouted_count}`\n"
         index += 1
     out += "*:trouted: The Whackers*\n"
     index = 1
     for user in User.select().order_by(User.trouter_count.desc()).limit(10):
-        out += f"{index}. <@{user.user_id}> - `{user.trouter_count}`\n"
+        out += f"{index}. *{user.username}* ({user.user_id}) - `{user.trouter_count}`\n"
         index += 1
     respond(
         response_type="in_channel",
@@ -136,7 +143,7 @@ def respond_tc(ack, respond, command, body):
     received_user = User.get(user_id=split_command[0][2:13])
     respond(
         response_type="in_channel",
-        text = f":trouted: <@{received_user.user_id}> has been trouted `{received_user.trouted_count}` times and trouted others `{received_user.trouter_count}` times."
+        text = f":trouted: *{received_user.username}* ({received_user.user_id}) has been trouted `{received_user.trouted_count}` times and trouted others `{received_user.trouter_count}` times."
     )
 
 @app.command("/trout-user-log")
@@ -144,10 +151,10 @@ def respond_tul(ack, command, respond, body):
     ack()
     split_command = command["text"].split(" ")
     received_user = User.get(user_id=body["user_id"])
-    trouted_out = f"*:trouted: Trout user log*\nFor <@{received_user.user_id}> (trouted by `{received_user.trouted_count}`, trouted `{received_user.trouter_count}` others) - last 10 trouts\n\n"
+    trouted_out = f"*:trouted: Trout user log*\nFor {received_user.username} ({received_user.user_id}) (trouted by `{received_user.trouted_count}`, trouted `{received_user.trouter_count}` others) - last 10 trouts\n\n"
     for trout in Trout.select().where(Trout.target == split_command[0][2:13]).order_by(Trout.timestamp.desc()).limit(10):
         url = f"{os.getenv("WS_ROOT_URL")}/archives/{trout.channel_id}/{trout.thread_id}"
-        trouted_out += f":trouted: {trout.target} *whacked* by a wet trout (<{url}|message>) (whacker: <@{trout.actor}>)\n"
+        trouted_out += f":trouted: *{trout.target}* *whacked* by a wet trout (<{url}|message>) (whacker: <@{trout.actor}>)\n"
     respond(
         response_type="in_channel",
         text = trouted_out
