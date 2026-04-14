@@ -1,3 +1,5 @@
 slack_bolt
 python-dotenv
 peewee
+psycopg[binary]
+sentry_sdk

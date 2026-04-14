@@ -7,7 +7,6 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 from dotenv import load_dotenv
 import sentry_sdk
-import logging
 
 load_dotenv()
 
@@ -16,7 +15,8 @@ sentry_sdk.init(
     dsn=os.getenv("SENTRY_URL"),
     # Add data like request headers and IP for users,
     # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
-    send_default_pii=True,
+    send_default_pii=False,
+    enable_logs=True,
 )
 # Initializes your app with your bot token and socket mode handler
 app = App(token=os.getenv("SLACK_BOT_TOKEN"))
@@ -65,20 +65,20 @@ username_pat = re.compile(username_pattern)
 def respond_t(ack, command, client, body, respond, say):
     # Acknowledge command request
     ack()
-    logger.log(f"responding to trouting req from {body["user_id"]} in {body["channel_id"]}")
+    sentry_sdk.logger.info(f"responding to trouting req from {body["user_id"]} in {body["channel_id"]}")
 
     split_command = command["text"].split(" ")
     pattern = r"^<https:\/\/[\w-]+\.slack\.com\/archives\/([CGD][A-Z0-9]+)\/p(\d+)>$"
     reason = ""
     pat = re.compile(pattern)
     if split_command[0] == "":
-        logger.log(f"no user passed in, responding with help")
+        sentry_sdk.logger.info(f"no user passed in, responding with help")
         respond(
             text=TROUT_HELP
         )
         exit()
     elif len(split_command) == 1:
-        logger.log(f"no reason passed in, responding with reason error")
+        sentry_sdk.logger.info(f"no reason passed in, responding with reason error")
         respond(
             text=":trouted: *Whack!* You should enter a reason to why you're whacking this user. The syntax for trouting someone is `/trout @USER [REASON]`."
         )
@@ -86,26 +86,26 @@ def respond_t(ack, command, client, body, respond, say):
     elif not re.match(pat, split_command[1]):
         reason = " ".join(split_command[1:])
         if len(reason) > 100:
-            logger.log(f"reason too long")
+            sentry_sdk.logger.info(f"reason too long")
             respond(f":trouted: *Whack!* Your reason can't be over 100 characters (it is {len(reason)} characters long). Please edit it so your reason is <= 100 characters.\n\nYou said: ```{reason}```")
             exit()
     else:
         reason = split_command[1][1:-1]
     if not re.match(username_pat, split_command[0]):
-        logger.log(f"attempted to trout {split_command[0]} but it is not a valid user")
+        sentry_sdk.logger.info(f"attempted to trout {split_command[0]} but it is not a valid user")
         respond(":trouted: *Whack!* That's not a valid user. The syntax for trouting someone is `/trout @USER [REASON]`.")
         exit()
     target_id = split_command[0][2:]
     target_id = target_id[:target_id.index("|")]
     actor_id = body["user_id"]
 
-    logger.log(f"target {target_id} trouted by actor {actor_id}")
+    sentry_sdk.logger.info(f"target {target_id} trouted by actor {actor_id}")
 
     actor, created_actor = User.get_or_create(user_id=actor_id)
     if len(actor.username) == 0:
         slack_user = client.users_info(user=actor_id)
         actor.username = slack_user["user"]["name"]
-        logger.log(f"actor new username: {actor.user_id} --> {actor.username}")
+        sentry_sdk.logger.info(f"actor new username: {actor.user_id} --> {actor.username}")
     actor.trouter_count += 1
     actor.save()
 
@@ -113,7 +113,7 @@ def respond_t(ack, command, client, body, respond, say):
     if len(target.username) == 0:
         slack_user = client.users_info(user=target_id)
         target.username = slack_user["user"]["name"]
-        logger.log(f"target new username: {target.user_id} --> {actor.username}")
+        sentry_sdk.logger.info(f"target new username: {target.user_id} --> {actor.username}")
     target.trouted_count += 1
     target.save()
 
@@ -202,7 +202,7 @@ def respond_t(ack, command, client, body, respond, say):
 @app.command("/trout-leaderboard")
 def respond_tl(ack, body, respond):
     ack()
-    logger.log(f"responding to leaderboard req from {body["user_id"]} in {body["channel_id"]}")
+    sentry_sdk.logger.info(f"responding to leaderboard req from {body["user_id"]} in {body["channel_id"]}")
     out = "*:trouted: Top Trouted*\n"
     index = 1
     for user in User.select().order_by(User.trouted_count.desc()).limit(10):
@@ -229,22 +229,22 @@ def respond_tl(ack, body, respond):
 @app.command("/trout-count")
 def respond_tc(ack, respond, body, command):
     ack()
-    logger.log(f"responding to trout count req from {body["user_id"]} in {body["channel_id"]}")
+    sentry_sdk.logger.info(f"responding to trout count req from {body["user_id"]} in {body["channel_id"]}")
     split_command = command["text"].split(" ")
     if split_command[0] == "":
-        logger.log("no user passed in for trout count req, responding with help")
+        sentry_sdk.logger.info("no user passed in for trout count req, responding with help")
         respond(
             text=TROUT_HELP
         )
         exit()
     
     if not re.match(username_pat, split_command[0]):
-        logger.log(f"attempted to get stats for {split_command[0]} but it is not a valid user")
+        sentry_sdk.logger.info(f"attempted to get stats for {split_command[0]} but it is not a valid user")
         respond(":trouted: *Whack!* That's not a valid user. The syntax for getting someone's trout count is `/trout-count @USER`.")
         exit()
     target_id = split_command[0][2:]
     target_id = target_id[:target_id.index("|")]
-    logger.log(f"identified the stat req for {target_id}")
+    sentry_sdk.logger.info(f"identified the stat req for {target_id}")
     received_user = User.get(user_id=target_id)
     respond(
         response_type="in_channel",
@@ -254,7 +254,7 @@ def respond_tc(ack, respond, body, command):
 @app.action("unsub_button")
 def unsub(ack, body, say):
     ack()
-    logger.log(f"responding to unsub req from {body["user"]["id"]} in {body["channel_id"]}")
+    sentry_sdk.logger.info(f"responding to unsub req from {body["user"]["id"]} in {body["channel"]["id"]}")
     target_id=body["user"]["id"]
     user = User.get(user_id=target_id)
     user.unsubscribed = True
@@ -298,6 +298,7 @@ def unsub(ack, body, say):
 @app.action("resub_button")
 def resub(ack, body, say):
     ack()
+    sentry_sdk.logger.info(f"responding to resub req from {body["user"]["id"]} in {body["channel"]["id"]}")
     target_id=body["user"]["id"]
     user = User.get(user_id=target_id)
     user.unsubscribed = False
@@ -344,12 +345,28 @@ def resub(ack, body, say):
 @app.command("/trout-user-log")
 def respond_tul(ack, command, respond, body):
     ack()
+    sentry_sdk.logger.info(f"responding to trout user log req from {body["user_id"]} in {body["channel_id"]}")
     split_command = command["text"].split(" ")
-    received_user = User.get(user_id=body["user_id"])
+    if split_command[0] == "":
+        sentry_sdk.logger.info("no user passed in for trout user log req, responding with help")
+        respond(
+            text=TROUT_HELP
+        )
+        exit()
+    
+    if not re.match(username_pat, split_command[0]):
+        sentry_sdk.logger.info(f"attempted to get user log for {split_command[0]} but it is not a valid user")
+        respond(":trouted: *Whack!* That's not a valid user. The syntax for getting someone's trout count is `/trout-count @USER`.")
+        exit()
+    target_id = split_command[0][2:]
+    target_id = target_id[:target_id.index("|")]
+    sentry_sdk.logger.info(f"identified the user log req for {target_id}")
+    received_user = User.get(user_id=target_id)
     trouted_out = f"*:trouted: Trout user log*\nFor <@{received_user.user_id}> ({received_user.user_id}) (trouted by `{received_user.trouted_count}`, trouted `{received_user.trouter_count}` others) - last 10 trouts\n\n"
     for trout in Trout.select().where(Trout.target == split_command[0][2:13]).order_by(Trout.timestamp.desc()).limit(10):
         timestamp = trout.timestamp.strftime('%Y-%m-%d %H:%M:%S')
         trouted_out += f"- *{timestamp}*: <@{trout.target}> *whacked* by a wet trout by <@{trout.actor}>: {trout.reason}\n"
+    sentry_sdk.logger.info(f"finished getting the user log stats for {target_id}")
     respond(
         text = trouted_out,
         unfurl_links=False
