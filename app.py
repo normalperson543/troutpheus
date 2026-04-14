@@ -28,6 +28,7 @@ class User(BaseModel):
     timestamp = DateTimeField(
         default=datetime.datetime.now,
         index=True)
+    unsubscribed = BooleanField(default=False)
 class Trout(BaseModel):
     id = AutoField()
     target = TextField()
@@ -46,7 +47,7 @@ print("Creating tables")
 db.create_tables([Trout, User])
 print("Done")
 
-TROUT_HELP = f"*:trouted: Troutpheus commands*\n\n`/trout @USER [REASON]` - Tells the user they made a mistake\n`/trout-leaderboard` - Posts the top 10 trouted users and whackers\n`trout-count @USER` - Posts how many times you got trouted and whacked others\n\nTrout logs: <#{os.getenv("TROUT_LOGS_CHANNEL")}>\nFor support, DM @normalperson543 or drop a message in that channel :p"
+TROUT_HELP = f"*:trouted: Troutpheus commands*\n\n`/trout @USER [REASON]` - Tells the user they made a mistake\n`/trout-leaderboard` - Posts the top 10 trouted users and whackers\n`/trout-count @USER` - Posts how many times you got trouted and whacked others\n\nTrout logs: <#{os.getenv("TROUT_LOGS_CHANNEL")}>\nFor support, DM @normalperson543 or drop a message in that channel :p"
 
 username_pattern = r"^<@[UW][A-Z0-9]{8,11}(?:\|[a-z0-9._-]+)?>"
 username_pat = re.compile(username_pattern)
@@ -86,28 +87,59 @@ def respond_t(ack, command, client, body, respond):
     target_id = target_id[:target_id.index("|")]
     actor_id = body["user_id"]
     Trout.create(target=target_id, actor=actor_id, reason=reason)
-    actor, created = User.get_or_create(user_id=actor_id)
+    actor, created_actor = User.get_or_create(user_id=actor_id)
     if len(actor.username) == 0:
         slack_user = client.users_info(user=actor_id)
         actor.username = slack_user["user"]["name"]
     actor.trouter_count += 1
     actor.save()
 
-    target, created = User.get_or_create(user_id=target_id)
+    target, created_target = User.get_or_create(user_id=target_id)
     if len(target.username) == 0:
         slack_user = client.users_info(user=target_id)
         target.username = slack_user["user"]["name"]
     target.trouted_count += 1
     target.save()
+
+    
     respond(
         response_type="in_channel",
         text=f"{target.username} has been *whacked* by a wet trout :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\nReason: {reason}",
+        blocks=[
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Whack!* *@{target.username}* (:trouted:{target.trouted_count}) has been *whacked* by a wet trout :3\n\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\n>{reason}"
+            },
+            "accessory": {
+                "type": "image",
+                "image_url": "https://user-cdn.hackclub-assets.com/019d711a-37ab-7422-a375-b7bcd3629304/Rainbow_trout_transparent.png",
+                "alt_text": "rainbow trout"
+            }
+        },
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": f"whacker: *@{actor.username}* (:trouted:{actor.trouted_count}) | <#{os.getenv("TROUT_LOGS_CHANNEL")}> | what's this?"
+                }
+            ]
+        }
+    ]
+    )
+    dm_resp = app.client.conversations_open(users=target_id)
+    dm_channel_id = dm_resp["channel"]["id"]
+    client.chat_postMessage(
+        channel=dm_channel_id,
+        text=f"You've just been whacked with a wet trout by <@{actor.user_id}> :3 Don't take this too seriously. Someone just wants to let you know that you did something silly. Reason: {reason}",
         blocks=[
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"*Whack!* <@{target.user_id}> (:trouted:{target.trouted_count}) has been *whacked* by a wet trout :3\n\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\n>{reason}"
+                    "text": f"*Whack!* You've just been *whacked* with a wet trout by <@{actor.user_id}> :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\n>{reason}"
                 },
                 "accessory": {
                     "type": "image",
@@ -116,20 +148,36 @@ def respond_t(ack, command, client, body, respond):
                 }
             },
             {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Unsubscribe from trout DMs",
+                        },
+                        "value": "unsub_button",
+                        "action_id": "unsub_button"
+                    }
+                ]
+            },
+            {
                 "type": "context",
                 "elements": [
                     {
                         "type": "mrkdwn",
-                        "text": f"whacker: <@{actor.user_id}> (:trouted:{actor.trouted_count}) | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
+                        "text": f"you've been trouted {target.trouted_count} times and trouted {target.trouter_count} others | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
                     }
                 ]
             }
         ]
     )
-    client.chat_postMessage(
-        channel=os.getenv("TROUT_LOGS_CHANNEL"),
-        text=f":trouted: *{target.username}* ({target.user_id}) (:trouted:{target.trouted_count}) *whacked* by *{actor.username}* ({actor.user_id}) (:trouted:{actor.trouted_count}) with a wet trout\n\n>{reason}"
-    )
+    print(created_target)
+    if created_target:
+        client.chat_postMessage(
+            channel=dm_channel_id,
+            text=f":hii: Hiya! It looks like this is your first time being trouted! If you don't know what this means, check out this canvas.\nYou can unsubscribe from getting these DMs by clicking the unsubscribe button on any trout."
+        )
 
 @app.command("/trout-leaderboard")
 def respond_tl(ack, respond):
@@ -178,6 +226,110 @@ def respond_tc(ack, respond, command):
         text = f":trouted: *{received_user.username}* ({received_user.user_id}) has been trouted `{received_user.trouted_count}` times and trouted others `{received_user.trouter_count}` times."
     )
 
+@app.action("unsub_button")
+def unsub(ack, body, client):
+    ack()
+    print(body)
+    target_id=body["user"]["id"]
+    user = User.get(user_id=target_id)
+    user.unsubscribed = True
+    user.save()
+    dm_resp = app.client.conversations_open(users=target_id)
+    dm_channel_id = dm_resp["channel"]["id"]
+    client.chat_postMessage(
+        channel=dm_channel_id,
+        text="You've successfully unsubscribed from getting DMs about you being trouted.",
+        blocks=[
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"Y:red-x: ou've successfully unsubscribed from getting DMs about you being trouted."
+                }
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Resubscribe to trout DMs",
+                        },
+                        "value": "resub_button",
+                        "action_id": "resub_button"
+                    }
+                ]
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"<#{os.getenv("TROUT_LOGS_CHANNEL")}>"
+                    }
+                ]
+            }
+        ]
+    )
+@app.action("resub_button")
+def resub(ack, body, client):
+    ack()
+    target_id=body["user"]["id"]
+    user = User.get(user_id=target_id)
+    user.unsubscribed = False
+    user.save()
+    dm_resp = app.client.conversations_open(users=target_id)
+    dm_channel_id = dm_resp["channel"]["id"]
+    client.chat_postMessage(
+        channel=dm_channel_id,
+        text="You've successfully resubscribed to getting DMs about you being trouted.",
+        blocks=[
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f":white_check_mark: You've successfully resubscribed from getting DMs about you being trouted."
+                }
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Unsubscribe from trout DMs",
+                        },
+                        "value": "unsub_button",
+                        "action_id": "unsub_button"
+                    }
+                ]
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"<#{os.getenv("TROUT_LOGS_CHANNEL")}>"
+                    }
+                ]
+            }
+        ]
+    )
+
+@app.command("/trout-user-log")
+def respond_tul(ack, command, respond, body):
+    ack()
+    split_command = command["text"].split(" ")
+    received_user = User.get(user_id=body["user_id"])
+    trouted_out = f"*:trouted: Trout user log*\nFor {received_user.username} ({received_user.user_id}) (trouted by `{received_user.trouted_count}`, trouted `{received_user.trouter_count}` others) - last 10 trouts\n\n"
+    for trout in Trout.select().where(Trout.target == split_command[0][2:13]).order_by(Trout.timestamp.desc()).limit(10):
+        timestamp = datetime.utcfromtimestamp(trout.timestamp).strftime('%Y-%m-%d %H:%M:%S')
+        trouted_out += f"- *{timestamp}*: <@{trout.target}> *whacked* by a wet trout by <@{trout.actor}>: {trout.reason}\n"
+    respond(
+        text = trouted_out
+    )
 
 # Start your app
 if __name__ == "__main__":
