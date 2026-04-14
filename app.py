@@ -6,9 +6,18 @@ from playhouse.postgres_ext import *
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 from dotenv import load_dotenv
+import sentry_sdk
+import logging
 
 load_dotenv()
 
+print("init sentry...")
+sentry_sdk.init(
+    dsn=os.getenv("SENTRY_URL"),
+    # Add data like request headers and IP for users,
+    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+    send_default_pii=True,
+)
 # Initializes your app with your bot token and socket mode handler
 app = App(token=os.getenv("SLACK_BOT_TOKEN"))
 COMMIT_ID = os.getenv("SOURCE_COMMIT")
@@ -41,7 +50,6 @@ class Trout(BaseModel):
         default=datetime.datetime.now,
         index=True)
 
-
 print("Connecting to database")
 db.connect()
 print("Creating tables")
@@ -57,18 +65,20 @@ username_pat = re.compile(username_pattern)
 def respond_t(ack, command, client, body, respond, say):
     # Acknowledge command request
     ack()
+    logger.log(f"responding to trouting req from {body["user_id"]} in {body["channel_id"]}")
 
     split_command = command["text"].split(" ")
     pattern = r"^<https:\/\/[\w-]+\.slack\.com\/archives\/([CGD][A-Z0-9]+)\/p(\d+)>$"
     reason = ""
     pat = re.compile(pattern)
-    print(split_command)
     if split_command[0] == "":
+        logger.log(f"no user passed in, responding with help")
         respond(
             text=TROUT_HELP
         )
         exit()
     elif len(split_command) == 1:
+        logger.log(f"no reason passed in, responding with reason error")
         respond(
             text=":trouted: *Whack!* You should enter a reason to why you're whacking this user. The syntax for trouting someone is `/trout @USER [REASON]`."
         )
@@ -76,30 +86,26 @@ def respond_t(ack, command, client, body, respond, say):
     elif not re.match(pat, split_command[1]):
         reason = " ".join(split_command[1:])
         if len(reason) > 100:
+            logger.log(f"reason too long")
             respond(f":trouted: *Whack!* Your reason can't be over 100 characters (it is {len(reason)} characters long). Please edit it so your reason is <= 100 characters.\n\nYou said: ```{reason}```")
             exit()
     else:
         reason = split_command[1][1:-1]
-    print(split_command)
     if not re.match(username_pat, split_command[0]):
+        logger.log(f"attempted to trout {split_command[0]} but it is not a valid user")
         respond(":trouted: *Whack!* That's not a valid user. The syntax for trouting someone is `/trout @USER [REASON]`.")
         exit()
     target_id = split_command[0][2:]
     target_id = target_id[:target_id.index("|")]
     actor_id = body["user_id"]
 
-    message_ts = left_message["ts"]
-    message_channel = left_message["channel"]
-    message_permalink = client.chat_getPermalink(
-        channel=message_channel,
-        message_ts=message_ts
-    )["permalink"]
+    logger.log(f"target {target_id} trouted by actor {actor_id}")
 
-    Trout.create(target=target_id, actor=actor_id, reason=reason, channel_id=message_channel, thread_id=message_ts, permalink=message_permalink)
     actor, created_actor = User.get_or_create(user_id=actor_id)
     if len(actor.username) == 0:
         slack_user = client.users_info(user=actor_id)
         actor.username = slack_user["user"]["name"]
+        logger.log(f"actor new username: {actor.user_id} --> {actor.username}")
     actor.trouter_count += 1
     actor.save()
 
@@ -107,11 +113,12 @@ def respond_t(ack, command, client, body, respond, say):
     if len(target.username) == 0:
         slack_user = client.users_info(user=target_id)
         target.username = slack_user["user"]["name"]
+        logger.log(f"target new username: {target.user_id} --> {actor.username}")
     target.trouted_count += 1
     target.save()
 
     
-    left_message = say(
+    respond(
         response_type="in_channel",
         text=f"{target.username} has been *whacked* by a wet trout :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\nReason: {reason}",
         blocks=[
@@ -138,6 +145,8 @@ def respond_t(ack, command, client, body, respond, say):
             }
         ]
     )
+
+    Trout.create(target=target_id, actor=actor_id, reason=reason)
 
     if not target.unsubscribed:
         dm_resp = app.client.conversations_open(users=target_id)
@@ -177,7 +186,7 @@ def respond_t(ack, command, client, body, respond, say):
                     "elements": [
                         {
                             "type": "mrkdwn",
-                            "text": f"<{message_permalink}|original trout message> | you've been trouted {target.trouted_count} times and trouted {target.trouter_count} others | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
+                            "text": f"you've been trouted {target.trouted_count} times and trouted {target.trouter_count} others | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
                         }
                     ]
                 }
@@ -186,13 +195,14 @@ def respond_t(ack, command, client, body, respond, say):
         )
     client.chat_postMessage(
         channel=os.getenv("TROUT_LOGS_CHANNEL"),
-        text=f":trouted: *{target.username}* ({target.user_id}) (:trouted:{target.trouted_count}) *whacked* by *{actor.username}* ({actor.user_id}) (:trouted:{actor.trouted_count}) with a wet trout (<{message_permalink}|original trout message>)\n\n>{reason}",
+        text=f":trouted: *{target.username}* ({target.user_id}) (:trouted:{target.trouted_count}) was *whacked* by *{actor.username}* ({actor.user_id}) (:trouted:{actor.trouted_count}) with a wet trout\n\n>{reason}",
         unfurl_links=False
     )
 
 @app.command("/trout-leaderboard")
-def respond_tl(ack, respond):
+def respond_tl(ack, body, respond):
     ack()
+    logger.log(f"responding to leaderboard req from {body["user_id"]} in {body["channel_id"]}")
     out = "*:trouted: Top Trouted*\n"
     index = 1
     for user in User.select().order_by(User.trouted_count.desc()).limit(10):
@@ -217,20 +227,24 @@ def respond_tl(ack, respond):
     )
 
 @app.command("/trout-count")
-def respond_tc(ack, respond, command):
+def respond_tc(ack, respond, body, command):
     ack()
+    logger.log(f"responding to trout count req from {body["user_id"]} in {body["channel_id"]}")
     split_command = command["text"].split(" ")
     if split_command[0] == "":
+        logger.log("no user passed in for trout count req, responding with help")
         respond(
             text=TROUT_HELP
         )
         exit()
     
     if not re.match(username_pat, split_command[0]):
+        logger.log(f"attempted to get stats for {split_command[0]} but it is not a valid user")
         respond(":trouted: *Whack!* That's not a valid user. The syntax for getting someone's trout count is `/trout-count @USER`.")
         exit()
     target_id = split_command[0][2:]
     target_id = target_id[:target_id.index("|")]
+    logger.log(f"identified the stat req for {target_id}")
     received_user = User.get(user_id=target_id)
     respond(
         response_type="in_channel",
@@ -240,13 +254,11 @@ def respond_tc(ack, respond, command):
 @app.action("unsub_button")
 def unsub(ack, body, say):
     ack()
-    print(body)
+    logger.log(f"responding to unsub req from {body["user"]["id"]} in {body["channel_id"]}")
     target_id=body["user"]["id"]
     user = User.get(user_id=target_id)
     user.unsubscribed = True
     user.save()
-    dm_resp = app.client.conversations_open(users=target_id)
-    dm_channel_id = dm_resp["channel"]["id"]
     say(
         response_type="in_channel",
         text="You've successfully unsubscribed from getting DMs about you being trouted.",
@@ -337,7 +349,7 @@ def respond_tul(ack, command, respond, body):
     trouted_out = f"*:trouted: Trout user log*\nFor <@{received_user.user_id}> ({received_user.user_id}) (trouted by `{received_user.trouted_count}`, trouted `{received_user.trouter_count}` others) - last 10 trouts\n\n"
     for trout in Trout.select().where(Trout.target == split_command[0][2:13]).order_by(Trout.timestamp.desc()).limit(10):
         timestamp = trout.timestamp.strftime('%Y-%m-%d %H:%M:%S')
-        trouted_out += f"- *{timestamp}*: <@{trout.target}> *whacked* by a wet trout by <@{trout.actor}> (<{trout.permalink}|original trout message>): {trout.reason}\n"
+        trouted_out += f"- *{timestamp}*: <@{trout.target}> *whacked* by a wet trout by <@{trout.actor}>: {trout.reason}\n"
     respond(
         text = trouted_out,
         unfurl_links=False
