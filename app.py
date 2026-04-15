@@ -137,7 +137,7 @@ def respond_t(ack, command, client, body, respond, say):
                 "elements": [
                     {
                         "type": "mrkdwn",
-                        "text": f"whacker: *@{actor.username}* (:trouted:{actor.trouted_count}) | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
+                        "text": f"whacker: *@{actor.username}* (:trouted:{actor.trouted_count}) | `/trout @user [reason]` | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
                     }
                 ]
             }
