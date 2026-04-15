@@ -83,9 +83,9 @@ def respond_t(ack, command, client, body, respond, say):
         exit()
     elif not re.match(pat, split_command[1]):
         reason = " ".join(split_command[1:])
-        if len(reason) > 100:
+        if len(reason) > 200:
             sentry_sdk.logger.info(f"reason too long")
-            respond(f":trouted: *Whack!* Your reason can't be over 100 characters (it is {len(reason)} characters long). Please edit it so your reason is <= 100 characters.\n\nYou said: ```{reason}```")
+            respond(f":trouted: *Whack!* Your reason can't be over 200 characters (it is {len(reason)} characters long). Please edit it so your reason is <= 200 characters.\n\nYou said: ```{reason}```")
             exit()
     else:
         reason = split_command[1][1:-1]
