@@ -177,7 +177,7 @@ def respond_t(ack, command, client, body, respond, say):
                                 "type": "plain_text",
                                 "text": "Unsubscribe from trout DMs",
                             },
-                            "style": "destructive",
+                            "style": "danger",
                             "value": "unsub_button",
                             "action_id": "unsub_button"
                         }
@@ -328,7 +328,7 @@ def resub(ack, body, say):
                             "type": "plain_text",
                             "text": "Unsubscribe from trout DMs",
                         },
-                        "style": "destructive",
+                        "style": "danger",
                         "value": "unsub_button",
                         "action_id": "unsub_button"
                     }
