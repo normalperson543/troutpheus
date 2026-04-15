@@ -159,7 +159,7 @@ def respond_t(ack, command, client, body, respond, say):
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"*Whack!* You've just been *whacked* with a wet trout by <@{actor.user_id}> :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\n>{reason}"
+                        "text": f"*Whack!* You've just been *whacked* with a wet trout by <@{actor.user_id}> :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.<{os.getenv("SUPPORT_CANVAS")}|What's a trout?>\n>{reason}"
                     },
                     "accessory": {
                         "type": "image",
