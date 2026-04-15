@@ -284,7 +284,7 @@ def unsub(ack, body, say):
         "unsub",
         1,
         attributes={
-            "actor": body["user_id"],
+            "actor": body["user"]["id"],
         },
     )
     target_id=body["user"]["id"]
@@ -336,7 +336,7 @@ def resub(ack, body, say):
         "resub",
         1,
         attributes={
-            "actor": body["user_id"],
+            "actor": body["user"]["id"],
         },
     )
     target_id=body["user"]["id"]
