@@ -258,7 +258,7 @@ def unsub(ack, body, say):
     target_id=body["user"]["id"]
     user = User.get(user_id=target_id)
     user.unsubscribed = True
-    user.save()
+    user.save() 
     say(
         response_type="in_channel",
         text="You've successfully unsubscribed from getting DMs about you being trouted.",
