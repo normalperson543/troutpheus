@@ -43,9 +43,6 @@ class Trout(BaseModel):
     id = AutoField()
     target = TextField()
     actor = TextField()
-    thread_id = TextField(default="")
-    channel_id = TextField(default="")
-    permalink = TextField(default="")
     reason = TextField(default="")
     timestamp = DateTimeField(
         default=datetime.datetime.now,
