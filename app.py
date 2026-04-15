@@ -97,7 +97,16 @@ def respond_t(ack, command, client, body, respond, say):
     target_id = target_id[:target_id.index("|")]
     actor_id = body["user_id"]
 
-    sentry_sdk.logger.info(f"target {target_id} trouted by actor {actor_id}")
+    sentry_sdk.logger.info(f"target {target_id} trouted by actor {actor_id} in {body["channel_id"]}")
+    sentry_sdk.metrics.count(
+        "trout",
+        1,
+        attributes={
+            "target": target_id,
+            "actor": actor_id,
+            "channel_id": body["channel_id"]
+        },
+    )
 
     actor, created_actor = User.get_or_create(user_id=actor_id)
     if len(actor.username) == 0:
@@ -201,6 +210,14 @@ def respond_t(ack, command, client, body, respond, say):
 @app.command("/trout-leaderboard")
 def respond_tl(ack, body, respond):
     ack()
+    sentry_sdk.metrics.count(
+        "trout_leaderboard",
+        1,
+        attributes={
+            "channel_id": body["channel_id"],
+            "actor": body["user_id"]
+        },
+    )
     sentry_sdk.logger.info(f"responding to leaderboard req from {body["user_id"]} in {body["channel_id"]}")
     out = "*:trouted: Top Trouted*\n"
     index = 1
@@ -244,6 +261,15 @@ def respond_tc(ack, respond, body, command):
     target_id = split_command[0][2:]
     target_id = target_id[:target_id.index("|")]
     sentry_sdk.logger.info(f"identified the stat req for {target_id}")
+    sentry_sdk.metrics.count(
+        "trout_count",
+        1,
+        attributes={
+            "channel_id": body["channel_id"],
+            "actor": body["user_id"],
+            "target": target_id
+        },
+    )
     received_user = User.get(user_id=target_id)
     respond(
         response_type="in_channel",
@@ -253,7 +279,14 @@ def respond_tc(ack, respond, body, command):
 @app.action("unsub_button")
 def unsub(ack, body, say):
     ack()
-    sentry_sdk.logger.info(f"responding to unsub req from {body["user"]["id"]} in {body["channel"]["id"]}")
+    sentry_sdk.logger.info(f"responding to unsub req from {body["user"]["id"]}")
+    sentry_sdk.metrics.count(
+        "unsub",
+        1,
+        attributes={
+            "actor": body["user_id"],
+        },
+    )
     target_id=body["user"]["id"]
     user = User.get(user_id=target_id)
     user.unsubscribed = True
@@ -298,13 +331,18 @@ def unsub(ack, body, say):
 @app.action("resub_button")
 def resub(ack, body, say):
     ack()
-    sentry_sdk.logger.info(f"responding to resub req from {body["user"]["id"]} in {body["channel"]["id"]}")
+    sentry_sdk.logger.info(f"responding to resub req from {body["user"]["id"]}")
+    sentry_sdk.metrics.count(
+        "resub",
+        1,
+        attributes={
+            "actor": body["user_id"],
+        },
+    )
     target_id=body["user"]["id"]
     user = User.get(user_id=target_id)
     user.unsubscribed = False
     user.save()
-    dm_resp = app.client.conversations_open(users=target_id)
-    dm_channel_id = dm_resp["channel"]["id"]
     say(
         response_type="in_channel",
         text="You've successfully resubscribed to getting DMs about you being trouted.",
@@ -362,6 +400,15 @@ def respond_tul(ack, command, respond, body):
     target_id = split_command[0][2:]
     target_id = target_id[:target_id.index("|")]
     sentry_sdk.logger.info(f"identified the user log req for {target_id}")
+    sentry_sdk.metrics.count(
+        "trout_user_log",
+        1,
+        attributes={
+            "channel_id": body["channel_id"],
+            "actor": body["user_id"],
+            "target": target_id
+        },
+    )
     received_user = User.get(user_id=target_id)
     trouted_out = f"*:trouted: Trout user log*\nFor <@{received_user.user_id}> ({received_user.user_id}) (trouted by `{received_user.trouted_count}`, trouted `{received_user.trouter_count}` others) - last 10 trouts\n\n"
     for trout in Trout.select().where(Trout.target == split_command[0][2:13]).order_by(Trout.timestamp.desc()).limit(10):
