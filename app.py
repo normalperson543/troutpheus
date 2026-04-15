@@ -19,6 +19,7 @@ sentry_sdk.init(
     enable_logs=True,
 )
 # Initializes your app with your bot token and socket mode handler
+sentry_sdk.logger.info("starting bot")
 app = App(token=os.getenv("SLACK_BOT_TOKEN"))
 COMMIT_ID = os.getenv("SOURCE_COMMIT")
 
@@ -159,7 +160,7 @@ def respond_t(ack, command, client, body, respond, say):
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"*Whack!* You've just been *whacked* with a wet trout by <@{actor.user_id}> :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.<{os.getenv("SUPPORT_CANVAS")}|What's a trout?>\n>{reason}"
+                        "text": f"*Whack!* You've just been *whacked* with a wet trout by <@{actor.user_id}> :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly. <{os.getenv("SUPPORT_CANVAS")}|What's a trout?>\n>{reason}"
                     },
                     "accessory": {
                         "type": "image",
@@ -176,6 +177,7 @@ def respond_t(ack, command, client, body, respond, say):
                                 "type": "plain_text",
                                 "text": "Unsubscribe from trout DMs",
                             },
+                            "style": "destructive",
                             "value": "unsub_button",
                             "action_id": "unsub_button"
                         }
@@ -279,6 +281,7 @@ def unsub(ack, body, say):
                             "type": "plain_text",
                             "text": "Resubscribe to trout DMs",
                         },
+                        "style": "primary",
                         "value": "resub_button",
                         "action_id": "resub_button"
                     }
@@ -325,6 +328,7 @@ def resub(ack, body, say):
                             "type": "plain_text",
                             "text": "Unsubscribe from trout DMs",
                         },
+                        "style": "destructive",
                         "value": "unsub_button",
                         "action_id": "unsub_button"
                     }
