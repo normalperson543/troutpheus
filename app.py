@@ -203,7 +203,7 @@ def respond_t(ack, command, client, body, respond, say):
         )
     client.chat_postMessage(
         channel=os.getenv("TROUT_LOGS_CHANNEL"),
-        text=f":trouted: *{target.username}* ({target.user_id}) (:trouted:{target.trouted_count}) was *whacked* by *{actor.username}* ({actor.user_id}) (:trouted:{actor.trouted_count}) with a wet trout\n\n>{reason}",
+        text=f":siren1: *{target.username}* ({target.user_id}) (:trouted:{target.trouted_count}) was *whacked* by *{actor.username}* ({actor.user_id}) (:trouted:{actor.trouted_count}) with a wet trout\n\n>{reason}",
         unfurl_links=False
     )
 
