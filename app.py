@@ -270,7 +270,14 @@ def respond_tc(ack, respond, body, command):
             "target": target_id
         },
     )
-    received_user = User.get(user_id=target_id)
+    try:
+        received_user = User.get(user_id=target_id)
+    except User.DoesNotExist:
+        sentry_sdk.logger.info(f"cannot find user {target_id}")
+        respond(
+            text = "*Whack!* The user you entered hasn't used Troutpheus yet. Check the username you entered, and try again. For reference, the correct syntax is `/trout-count @[USER]`."
+        )
+        exit()
     respond(
         response_type="in_channel",
         text = f":trouted: *{received_user.username}* ({received_user.user_id}) has been trouted `{received_user.trouted_count}` times and trouted others `{received_user.trouter_count}` times."
@@ -409,9 +416,20 @@ def respond_tul(ack, command, respond, body):
             "target": target_id
         },
     )
-    received_user = User.get(user_id=target_id)
-    trouted_out = f"*:trouted: Trout user log*\nFor <@{received_user.user_id}> ({received_user.user_id}) (trouted by `{received_user.trouted_count}`, trouted `{received_user.trouter_count}` others) - last 10 trouts\n\n"
+    try:
+        received_user = User.get(user_id=target_id)
+    except User.DoesNotExist:
+        sentry_sdk.logger.info(f"cannot find user {target_id}")
+        respond(
+            text = "*Whack!* The user you entered hasn't used Troutpheus yet. Check the username you entered, and try again. For reference, the correct syntax is `/trout-user-log @[USER]`."
+        )
+        exit()
+    trouted_out = f"*:trouted: Trout user log*\nFor <@{received_user.user_id}> ({received_user.user_id}) (trouted by `{received_user.trouted_count}`, trouted `{received_user.trouter_count}` others) - last 10 trouts\n\n*Trouted by others*\n\n"
     for trout in Trout.select().where(Trout.target == split_command[0][2:13]).order_by(Trout.timestamp.desc()).limit(10):
+        timestamp = trout.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+        trouted_out += f"- *{timestamp}*: <@{trout.target}> *whacked* by a wet trout by <@{trout.actor}>: {trout.reason}\n"
+    trouted_out += "\n\n*Trouted others*\n\n"
+    for trout in Trout.select().where(Trout.actor == split_command[0][2:13]).order_by(Trout.timestamp.desc()).limit(10):
         timestamp = trout.timestamp.strftime('%Y-%m-%d %H:%M:%S')
         trouted_out += f"- *{timestamp}*: <@{trout.target}> *whacked* by a wet trout by <@{trout.actor}>: {trout.reason}\n"
     sentry_sdk.logger.info(f"finished getting the user log stats for {target_id}")
