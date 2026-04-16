@@ -7,6 +7,8 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 from dotenv import load_dotenv
 import sentry_sdk
+from slack_sdk.errors import SlackApiError
+
 
 load_dotenv()
 
@@ -17,6 +19,7 @@ sentry_sdk.init(
     # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
     send_default_pii=False,
     enable_logs=True,
+    environment=os.getenv("ENVIRONMENT")
 )
 # Initializes your app with your bot token and socket mode handler
 sentry_sdk.logger.info("starting bot")
@@ -59,8 +62,137 @@ TROUT_HELP = f"*:trouted: Troutpheus commands*\n\n`/trout @USER [REASON]` - Tell
 username_pattern = r"^<@[UW][A-Z0-9]{8,11}(?:\|[a-z0-9._-]+)?>"
 username_pat = re.compile(username_pattern)
 
+def trout(actor_id, target_id, channel_id, reason, client, respond):
+    sentry_sdk.logger.info(f"target {target_id} trouted by actor {actor_id} in {channel_id}")
+    sentry_sdk.metrics.count(
+        "trout",
+        1,
+        attributes={
+            "target": target_id,
+            "actor": actor_id,
+            "channel_id": channel_id
+        },
+    )
+
+    actor, created_actor = User.get_or_create(user_id=actor_id)
+    if len(actor.username) == 0:
+        slack_user = client.users_info(user=actor_id)
+        actor.username = slack_user["user"]["name"]
+        sentry_sdk.logger.info(f"actor new username: {actor.user_id} --> {actor.username}")
+    
+
+    target, created_target = User.get_or_create(user_id=target_id)
+    if len(target.username) == 0:
+        slack_user = client.users_info(user=target_id)
+        target.username = slack_user["user"]["name"]
+        sentry_sdk.logger.info(f"target new username: {target.user_id} --> {target.username}")
+    
+    actor.trouter_count += 1
+    actor.save()
+
+    target.trouted_count += 1
+    target.save()
+
+    Trout.create(target=target_id, actor=actor_id, reason=reason)
+
+    if not target.unsubscribed:
+        dm_resp = app.client.conversations_open(users=target_id)
+        dm_channel_id = dm_resp["channel"]["id"]
+        try:
+            client.chat_postMessage(
+                channel=dm_channel_id,
+                text=f"Whack! You've just been whacked with a wet trout by <@{actor.user_id}> :3 Don't take this too seriously. Someone just wants to let you know that you did something silly. Reason: {reason}",
+                blocks=[
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*Whack!* You've just been *whacked* with a wet trout by <@{actor.user_id}> :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly. <{os.getenv("SUPPORT_CANVAS")}|What's a trout?>\n>{reason}"
+                        },
+                        "accessory": {
+                            "type": "image",
+                            "image_url": "https://user-cdn.hackclub-assets.com/019d711a-37ab-7422-a375-b7bcd3629304/Rainbow_trout_transparent.png",
+                            "alt_text": "rainbow trout"
+                        }
+                    },
+                    {
+                        
+                        "type": "actions",
+                        "elements": [
+                            {
+                                "type": "button",
+                                "text": {
+                                    "type": "plain_text",
+                                    "text": "Whack them back",
+                                },
+                                "style": "primary",
+                                "value": target_id,
+                                "action_id": "troutback_button"
+                            },
+                            {
+                                "type": "button",
+                                "text": {
+                                    "type": "plain_text",
+                                    "text": "Unsubscribe from trout DMs",
+                                },
+                                "style": "danger",
+                                "value": "unsub_button",
+                                "action_id": "unsub_button"
+                            }
+                        ]
+                    },
+                    {
+                        "type": "context",
+                        "elements": [
+                            {
+                                "type": "mrkdwn",
+                                "text": f"you've been trouted {target.trouted_count} times and trouted {target.trouter_count} others | `/trout @[USER] [REASON]` | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
+                            }
+                        ]
+                    }
+                ],
+                unfurl_links=False
+            )
+        except SlackApiError:
+            sentry_sdk.logger.warning("cannot send message to bot")
+            
+    
+    respond(
+        response_type="in_channel",
+        text=f"{target.username} has been *whacked* by a wet trout :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\nReason: {reason}",
+        blocks=[
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Whack!* *@{target.username}* (:trouted:{target.trouted_count}) has been *whacked* by a wet trout :3\n\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\n>{reason}"
+                },
+                "accessory": {
+                    "type": "image",
+                    "image_url": "https://user-cdn.hackclub-assets.com/019d711a-37ab-7422-a375-b7bcd3629304/Rainbow_trout_transparent.png",
+                    "alt_text": "rainbow trout"
+                }
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"whacker: *@{actor.username}* (:trouted:{actor.trouted_count}) | `/trout @[USER] [REASON]` | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
+                    }
+                ]
+            }
+        ]
+    )
+
+    
+    client.chat_postMessage(
+        channel=os.getenv("TROUT_LOGS_CHANNEL"),
+        text=f":siren1: *{target.username}* ({target.user_id}) (:trouted:{target.trouted_count}) was *whacked* by *{actor.username}* ({actor.user_id}) (:trouted:{actor.trouted_count}) with a wet trout\n\n>{reason}",
+        unfurl_links=False
+    )
 @app.command("/trout")
-def respond_t(ack, command, client, body, respond, say):
+def respond_t(ack, command, body, respond, client):
     # Acknowledge command request
     ack()
     sentry_sdk.logger.info(f"responding to trouting req from {body["user_id"]} in {body["channel_id"]}")
@@ -97,115 +229,8 @@ def respond_t(ack, command, client, body, respond, say):
     target_id = target_id[:target_id.index("|")]
     actor_id = body["user_id"]
 
-    sentry_sdk.logger.info(f"target {target_id} trouted by actor {actor_id} in {body["channel_id"]}")
-    sentry_sdk.metrics.count(
-        "trout",
-        1,
-        attributes={
-            "target": target_id,
-            "actor": actor_id,
-            "channel_id": body["channel_id"]
-        },
-    )
-
-    actor, created_actor = User.get_or_create(user_id=actor_id)
-    if len(actor.username) == 0:
-        slack_user = client.users_info(user=actor_id)
-        actor.username = slack_user["user"]["name"]
-        sentry_sdk.logger.info(f"actor new username: {actor.user_id} --> {actor.username}")
-    actor.trouter_count += 1
-    actor.save()
-
-    target, created_target = User.get_or_create(user_id=target_id)
-    if len(target.username) == 0:
-        slack_user = client.users_info(user=target_id)
-        target.username = slack_user["user"]["name"]
-        sentry_sdk.logger.info(f"target new username: {target.user_id} --> {target.username}")
-    target.trouted_count += 1
-    target.save()
-
+    trout(actor_id, target_id, body["channel_id"], reason, client, respond)
     
-    respond(
-        response_type="in_channel",
-        text=f"{target.username} has been *whacked* by a wet trout :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\nReason: {reason}",
-        blocks=[
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*Whack!* *@{target.username}* (:trouted:{target.trouted_count}) has been *whacked* by a wet trout :3\n\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\n>{reason}"
-                },
-                "accessory": {
-                    "type": "image",
-                    "image_url": "https://user-cdn.hackclub-assets.com/019d711a-37ab-7422-a375-b7bcd3629304/Rainbow_trout_transparent.png",
-                    "alt_text": "rainbow trout"
-                }
-            },
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": f"whacker: *@{actor.username}* (:trouted:{actor.trouted_count}) | `/trout @[USER] [REASON]` | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
-                    }
-                ]
-            }
-        ]
-    )
-
-    Trout.create(target=target_id, actor=actor_id, reason=reason)
-
-    if not target.unsubscribed:
-        dm_resp = app.client.conversations_open(users=target_id)
-        dm_channel_id = dm_resp["channel"]["id"]
-        client.chat_postMessage(
-            channel=dm_channel_id,
-            text=f"Whack! You've just been whacked with a wet trout by <@{actor.user_id}> :3 Don't take this too seriously. Someone just wants to let you know that you did something silly. Reason: {reason}",
-            blocks=[
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"*Whack!* You've just been *whacked* with a wet trout by <@{actor.user_id}> :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly. <{os.getenv("SUPPORT_CANVAS")}|What's a trout?>\n>{reason}"
-                    },
-                    "accessory": {
-                        "type": "image",
-                        "image_url": "https://user-cdn.hackclub-assets.com/019d711a-37ab-7422-a375-b7bcd3629304/Rainbow_trout_transparent.png",
-                        "alt_text": "rainbow trout"
-                    }
-                },
-                {
-                    "type": "actions",
-                    "elements": [
-                        {
-                            "type": "button",
-                            "text": {
-                                "type": "plain_text",
-                                "text": "Unsubscribe from trout DMs",
-                            },
-                            "style": "danger",
-                            "value": "unsub_button",
-                            "action_id": "unsub_button"
-                        }
-                    ]
-                },
-                {
-                    "type": "context",
-                    "elements": [
-                        {
-                            "type": "mrkdwn",
-                            "text": f"you've been trouted {target.trouted_count} times and trouted {target.trouter_count} others | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
-                        }
-                    ]
-                }
-            ],
-            unfurl_links=False
-        )
-    client.chat_postMessage(
-        channel=os.getenv("TROUT_LOGS_CHANNEL"),
-        text=f":siren1: *{target.username}* ({target.user_id}) (:trouted:{target.trouted_count}) was *whacked* by *{actor.username}* ({actor.user_id}) (:trouted:{actor.trouted_count}) with a wet trout\n\n>{reason}",
-        unfurl_links=False
-    )
 
 @app.command("/trout-leaderboard")
 def respond_tl(ack, body, respond):
@@ -387,6 +412,62 @@ def resub(ack, body, say):
             }
         ]
     )
+
+@app.action("troutback_button")
+def troutback_modal_open(ack, body, client):
+    ack()
+    sentry_sdk.logger.info(f"responding to troutback button press from {body["user"]["id"]} to {action["value"]}")
+    action = body["actions"][0]
+    client.views_open(
+        trigger_id=body["trigger_id"],
+        view={
+            "title": {
+                "type": "plain_text",
+                "text": "Trout someone back >:3",
+                "emoji": True
+            },
+            "callback_id": "troutback",
+            "submit": {
+                "type": "plain_text",
+                "text": "Trout them :devious-ahh:",
+                "emoji": True
+            },
+            "type": "modal",
+            "close": {
+                "type": "plain_text",
+                "text": "nah i change my mind",
+                "emoji": True
+            },
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"*You're about to whack <@{action["value"]}> back with a trout!* Enter the reason why you're trouting them back."
+                    }
+                },
+                {
+                    "type": "input",
+                    "element": {
+                        "type": "plain_text_input",
+                        "multiline": True,
+                        "action_id": "plain_text_input-action"
+                    },
+                    "label": {
+                        "type": "plain_text",
+                        "text": "Trout reason",
+                        "emoji": True
+                    },
+                    "optional": False
+                }
+            ]
+        }
+    )
+
+@app.view("troutback")
+def handle_troutback_submit(ack, body, view, client):
+    ack()
+    name = view["state"]["values"]["name_block"]["name_input"]["value"]
 
 @app.command("/trout-user-log")
 def respond_tul(ack, command, respond, body):
