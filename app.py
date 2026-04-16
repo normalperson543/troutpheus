@@ -420,6 +420,7 @@ def troutback_modal_open(ack, body, client):
     action = body["actions"][0]
     client.views_open(
         trigger_id=body["trigger_id"],
+        private_metadata=action["value"],
         view={
             "title": {
                 "type": "plain_text",
@@ -448,10 +449,11 @@ def troutback_modal_open(ack, body, client):
                 },
                 {
                     "type": "input",
+                    "block_id": "reason_block",
                     "element": {
                         "type": "plain_text_input",
                         "multiline": True,
-                        "action_id": "plain_text_input-action"
+                        "action_id": "reason_input"
                     },
                     "label": {
                         "type": "plain_text",
@@ -465,9 +467,23 @@ def troutback_modal_open(ack, body, client):
     )
 
 @app.view("troutback")
-def handle_troutback_submit(ack, body, view, client):
+def handle_troutback_submit(ack, body, view, respond, client):
     ack()
-    name = view["state"]["values"]["name_block"]["name_input"]["value"]
+    target_id = view["private_metadata"]
+    reason = view["state"]["values"]["reason_block"]["reason_input"]["value"]
+    sentry_sdk.logger.info(f"responding to troutback submission from {body["user"]["id"]} to {target_id}")
+    if len(reason) == 0:
+        sentry_sdk.logger.info(f"no reason passed in for troutback, responding with reason error")
+        respond(
+            text=":trouted: *Whack!* You should enter a reason to why you're whacking this user. The syntax for trouting someone is `/trout @USER [REASON]`."
+        )
+        exit()
+    if len(reason) > 200:
+        sentry_sdk.logger.info(f"reason too long for troutback")
+        respond(f":trouted: *Whack!* Your reason can't be over 200 characters (it is {len(reason)} characters long). Please edit it so your reason is <= 200 characters.\n\nYou said: ```{reason}```")
+        exit()
+    trout(body["user"]["id"], target_id, body["channel_id"], reason, client, respond)
+    
 
 @app.command("/trout-user-log")
 def respond_tul(ack, command, respond, body):
