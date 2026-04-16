@@ -120,7 +120,7 @@ def respond_t(ack, command, client, body, respond, say):
     if len(target.username) == 0:
         slack_user = client.users_info(user=target_id)
         target.username = slack_user["user"]["name"]
-        sentry_sdk.logger.info(f"target new username: {target.user_id} --> {actor.username}")
+        sentry_sdk.logger.info(f"target new username: {target.user_id} --> {target.username}")
     target.trouted_count += 1
     target.save()
 
