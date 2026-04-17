@@ -89,6 +89,7 @@ def respond_t(ack, command, client, body, respond, say):
             exit()
     else:
         reason = split_command[1][1:-1]
+    reason = reason.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     if not re.match(username_pat, split_command[0]):
         sentry_sdk.logger.info(f"attempted to trout {split_command[0]} but it is not a valid user")
         respond(":trouted: *Whack!* That's not a valid user. The syntax for trouting someone is `/trout @USER [REASON]`.")
