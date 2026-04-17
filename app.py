@@ -62,7 +62,7 @@ TROUT_HELP = f"*:trouted: Troutpheus commands*\n\n`/trout @USER [REASON]` - Tell
 username_pattern = r"^<@[UW][A-Z0-9]{8,11}(?:\|[a-z0-9._-]+)?>"
 username_pat = re.compile(username_pattern)
 
-def trout(actor_id, target_id, reason, client, respond, channel_id="", send_using_respond=True):
+def trout(actor_id, target_id, reason, client, respond, channel_id="", send_using_respond=True, actor_dm_id=""):
     if len(channel_id) > 0:
         sentry_sdk.logger.info(f"target {target_id} trouted by actor {actor_id} in {channel_id}")
     else:
@@ -79,8 +79,6 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
 
     reason = reason.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-    print(actor_id)
-    print(target_id)
     actor, created_actor = User.get_or_create(user_id=actor_id)
     if len(actor.username) == 0:
         slack_user = client.users_info(user=actor_id)
@@ -133,7 +131,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
                                     "text": "Whack them back",
                                 },
                                 "style": "primary",
-                                "value": target_id,
+                                "value": actor_id,
                                 "action_id": "troutback_button"
                             },
                             {
@@ -166,7 +164,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
     if send_using_respond:
         respond(
             response_type="in_channel",
-            text=f"{target.username} has been *whacked* by a wet trout :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\nReason: {reason}",
+            text=f"Whack! {target.username} has been *whacked* by a wet trout :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\nReason: {reason}",
             blocks=[
                 {
                     "type": "section",
@@ -193,14 +191,14 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
         )
     else:
         client.chat_postMessage(
-            channel=dm_channel_id,
-            text=f"{target.username} has been *whacked* by a wet trout :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\nReason: {reason}",
+            channel=actor_dm_id,
+            text=f"You whacked {target.username} with a wet trout :3 Reason: {reason}",
             blocks=[
                 {
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"*Whack!* *@{target.username}* (:trouted:{target.trouted_count}) has been *whacked* by a wet trout :3\n\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\n>{reason}"
+                        "text": f"*Whack!* You *whacked* *@{target.username}* (:trouted:{target.trouted_count}) by a wet trout :3\n>{reason}"
                     },
                     "accessory": {
                         "type": "image",
@@ -225,7 +223,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
         text=f":siren1: *{target.username}* ({target.user_id}) (:trouted:{target.trouted_count}) was *whacked* by *{actor.username}* ({actor.user_id}) (:trouted:{actor.trouted_count}) with a wet trout\n\n>{reason}",
         unfurl_links=False
     )
-@app.command("/tstagingonly-trout")
+@app.command("/trout")
 def respond_t(ack, command, body, respond, client):
     # Acknowledge command request
     ack()
@@ -263,12 +261,10 @@ def respond_t(ack, command, body, respond, client):
     target_id = target_id[:target_id.index("|")]
     actor_id = body["user_id"]
 
-    print(reason)
-
     trout(actor_id, target_id, reason, client, respond, body["channel_id"])
     
 
-@app.command("/tstagingonly-trout-leaderboard")
+@app.command("/trout-leaderboard")
 def respond_tl(ack, body, respond):
     ack()
     sentry_sdk.metrics.count(
@@ -303,7 +299,7 @@ def respond_tl(ack, body, respond):
 	    ]
     )
 
-@app.command("/tstagingonly-trout-count")
+@app.command("/trout-count")
 def respond_tc(ack, respond, body, command):
     ack()
     sentry_sdk.logger.info(f"responding to trout count req from {body["user_id"]} in {body["channel_id"]}")
@@ -350,7 +346,7 @@ def troutback_modal_open(ack, body, client, action):
     ack()
     sentry_sdk.logger.info(f"responding to troutback button press from {body["user"]["id"]} to {action["value"]}")
     action = body["actions"][0]
-    print(action)
+
     client.views_open(
         trigger_id=body["trigger_id"],
         view={
@@ -402,24 +398,33 @@ def troutback_modal_open(ack, body, client, action):
 @app.view("troutback")
 def handle_troutback_submit(ack, body, view, respond, client):
     ack()
+
+    dm_resp = app.client.conversations_open(users=body["user"]["id"])
+    dm_channel_id = dm_resp["channel"]["id"]
+
     target_id = view["private_metadata"]
+    
+
     reason = view["state"]["values"]["reason_block"]["reason_input"]["value"]
     sentry_sdk.logger.info(f"responding to troutback submission from {body["user"]["id"]} to {target_id}")
     if len(reason) == 0:
         sentry_sdk.logger.info(f"no reason passed in for troutback, responding with reason error")
-        respond(
+        client.chat_postMessage(
+            channel=dm_channel_id,
             text=":trouted: *Whack!* You should enter a reason to why you're whacking this user. The syntax for trouting someone is `/trout @USER [REASON]`."
         )
         exit()
     if len(reason) > 200:
         sentry_sdk.logger.info(f"reason too long for troutback")
-        respond(f":trouted: *Whack!* Your reason can't be over 200 characters (it is {len(reason)} characters long). Please edit it so your reason is <= 200 characters.\n\nYou said: ```{reason}```")
+        client.chat_postMessage(
+            channel=dm_channel_id,
+            text=f":trouted: *Whack!* Your reason can't be over 200 characters (it is {len(reason)} characters long). Please edit it so your reason is <= 200 characters.\n\nYou said: ```{reason}```"
+        )
         exit()
-    print(view)
-    trout(body["user"]["id"], target_id, reason, client, respond, "", False)
+    trout(body["user"]["id"], target_id, reason, client, respond, "", False, dm_channel_id)
     
 
-@app.command("/tstagingonly-trout-user-log")
+@app.command("/trout-user-log")
 def respond_tul(ack, command, respond, body):
     ack()
     sentry_sdk.logger.info(f"responding to trout user log req from {body["user_id"]} in {body["channel_id"]}")
