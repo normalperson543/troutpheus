@@ -58,11 +58,15 @@ db.create_tables([Trout, User])
 print("Done")
 
 TROUT_HELP = f"*:trouted: Troutpheus commands*\n\n`/trout @USER [REASON]` - Tells the user they made a mistake\n`/trout-leaderboard` - Posts the top 10 trouted users and whackers\n`/trout-count @USER` - Posts how many times you got trouted and whacked others\n`/trout-user-logs @USER` - Posts the last 10 trouts of a user\n\nTrout logs: <#{os.getenv("TROUT_LOGS_CHANNEL")}>\nFor support, DM @normalperson543 or drop a message in that channel :p"
+BLACKLIST_USERS = os.getenv("BLACKLIST_USERS").split(",")
 
 username_pattern = r"^<@[UW][A-Z0-9]{8,11}(?:\|[a-z0-9._-]+)?>"
 username_pat = re.compile(username_pattern)
 
 def trout(actor_id, target_id, reason, client, respond, channel_id="", send_using_respond=True, actor_dm_id=""):
+    if actor in BLACKLIST_USERS:
+        respond("You have been banned from using Troutpheus due to abuse.")
+        exit()
     if len(channel_id) > 0:
         sentry_sdk.logger.info(f"target {target_id} trouted by actor {actor_id} in {channel_id}")
     else:
