@@ -50,17 +50,26 @@ class Trout(BaseModel):
     timestamp = DateTimeField(
         default=datetime.datetime.now,
         index=True)
+class BlacklistedChannel(BaseModel):
+    id = AutoField()
+    channel = TextField(unique=True)
+    timestamp = DateTimeField(
+        default=datetime.datetime.now,
+        index=True)
 
 print("Connecting to database")
 db.connect()
 print("Creating tables")
-db.create_tables([Trout, User])
+db.create_tables([Trout, User, BlacklistedChannel])
 print("Done")
 
 TROUT_HELP = f"*:trouted: Troutpheus commands*\n\n`/trout @USER [REASON]` - Tells the user they made a mistake\n`/trout-leaderboard` - Posts the top 10 trouted users and whackers\n`/trout-count @USER` - Posts how many times you got trouted and whacked others\n`/trout-user-logs @USER` - Posts the last 10 trouts of a user\n\nTrout logs: <#{os.getenv("TROUT_LOGS_CHANNEL")}>\nFor support, DM @normalperson543 or drop a message in that channel :p"
 
 username_pattern = r"^<@[UW][A-Z0-9]{8,11}(?:\|[a-z0-9._-]+)?>"
 username_pat = re.compile(username_pattern)
+
+channel_id_pattern = r"^<@C[A-Z0-9]{8,11}(?:\|[a-z0-9._-]+)?>"
+channel_id_pat = re.compile(channel_id_pattern)
 
 def trout(actor_id, target_id, reason, client, respond, channel_id="", send_using_respond=True, actor_dm_id=""):
     if len(channel_id) > 0:
@@ -163,7 +172,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
             
     if send_using_respond:
         respond(
-            response_type="in_channel",
+            response_type="ephemeral" if is_blacklisted(channel_id) else "in_channel",
             text=f"Whack! {target.username} has been *whacked* by a wet trout :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\nReason: {reason}",
             blocks=[
                 {
@@ -223,6 +232,9 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
         text=f":siren1: *{target.username}* ({target.user_id}) (:trouted:{target.trouted_count}) was *whacked* by *{actor.username}* ({actor.user_id}) (:trouted:{actor.trouted_count}) with a wet trout\n\n>{reason}",
         unfurl_links=False
     )
+
+def is_blacklisted(channel_id):
+    return BlacklistedChannel.select().where(BlacklistedChannel.channel == channel_id) > 0
 @app.command("/trout")
 def respond_t(ack, command, body, respond, client):
     # Acknowledge command request
@@ -230,9 +242,7 @@ def respond_t(ack, command, body, respond, client):
     sentry_sdk.logger.info(f"responding to trouting req from {body["user_id"]} in {body["channel_id"]}")
 
     split_command = command["text"].split(" ")
-    pattern = r"^<https:\/\/[\w-]+\.slack\.com\/archives\/([CGD][A-Z0-9]+)\/p(\d+)>$"
     reason = ""
-    pat = re.compile(pattern)
     if split_command[0] == "":
         sentry_sdk.logger.info(f"no user passed in, responding with help")
         respond(
@@ -245,14 +255,11 @@ def respond_t(ack, command, body, respond, client):
             text=":trouted: *Whack!* You should enter a reason to why you're whacking this user. The syntax for trouting someone is `/trout @USER [REASON]`."
         )
         exit()
-    elif not re.match(pat, split_command[1]):
-        reason = " ".join(split_command[1:])
-        if len(reason) > 200:
-            sentry_sdk.logger.info(f"reason too long")
-            respond(f":trouted: *Whack!* Your reason can't be over 200 characters (it is {len(reason)} characters long). Please edit it so your reason is <= 200 characters.\n\nYou said: ```{reason}```")
-            exit()
-    else:
-        reason = split_command[1][1:-1]
+    reason = " ".join(split_command[1:])
+    if len(reason) > 200:
+        sentry_sdk.logger.info(f"reason too long")
+        respond(f":trouted: *Whack!* Your reason can't be over 200 characters (it is {len(reason)} characters long). Please edit it so your reason is <= 200 characters.\n\nYou said: ```{reason}```")
+        exit()
     if not re.match(username_pat, split_command[0]):
         sentry_sdk.logger.info(f"attempted to trout {split_command[0]} but it is not a valid user")
         respond(":trouted: *Whack!* That's not a valid user. The syntax for trouting someone is `/trout @USER [REASON]`.")
@@ -286,8 +293,9 @@ def respond_tl(ack, body, respond):
     for user in User.select().order_by(User.trouter_count.desc()).limit(10):
         out += f"{index}. *{user.username}* ({user.user_id}) - `{user.trouter_count}`\n"
         index += 1
+    
     respond(
-        response_type="in_channel",
+        response_type="ephemeral" if is_blacklisted(body["channel_id"]) else "in_channel",
         blocks=[
             {
                 "type": "section",
@@ -336,7 +344,7 @@ def respond_tc(ack, respond, body, command):
         )
         exit()
     respond(
-        response_type="in_channel",
+        response_type="ephemeral" if is_blacklisted(body["channel_id"]) else "in_channel",
         text = f":trouted: *{received_user.username}* ({received_user.user_id}) has been trouted `{received_user.trouted_count}` times and trouted others `{received_user.trouter_count}` times."
     )
 
@@ -473,6 +481,73 @@ def respond_tul(ack, command, respond, body):
         text = trouted_out,
         unfurl_links=False
     )
+@app.command("/trout-blacklist")
+def respond_blacklist(ack, respond, body, client):
+    ack()
+    target_id = body["channel_id"]
+    
+    if not re.match(channel_id_pat, target_id):
+        sentry_sdk.logger.info(f"attempted to trout {split_command[0]} but it is not a valid user")
+        respond("Unfortunately, Troutpheus cannot blacklist this at this time.")
+        exit()
+    
+    members_response = client.conversations_members(channel=target_id)
+    member_ids = set(members_response["members"])
+
+    
+
+    is_cm = False
+    if body["user_id"] not in member_ids:
+        is_cm = False
+    else:
+        user = client.users_info(user=body["user_id"])["user"]
+        is_cm = user.get("is_admin") or user.get("is_owner")
+
+    if is_cm or body["user_id"] == os.getenv("ADMIN_ID"):
+        try:
+            BlacklistedChannel.create(channel=target_id)
+        except IntegrityError:
+            sentry_sdk.logger.info(f"already blacklisted {target_id}")
+            respond(f":trouted: *Whack!* It looks like you already blacklisted <#{target_id}> from getting Troutpheus notifications. To whitelist this channel, run `/trout-whitelist` in your channel.")
+            exit()
+        sentry_sdk.logger.info(f"blacklisting {target_id}")
+        respond(f":red_x: You've successfully *blacklisted* <#{target_id}> from getting Troutpheus notifications. When members use Troutpheus commands here, they'll be sent as 'only visible to you' messages.")
+    else:
+        sentry_sdk.logger.info(f"no permissions to blacklist the channel")
+        respond(f":trouted: *Whack!* You aren't the channel manager of <#{target_id}>, so you cannot blacklist Troutpheus from this channel. Ask a channel manager to blacklist the channel for you.")
+        exit()
+
+@app.command("/trout-whitelist")
+def respond_whitelist(ack, respond, body, client):
+    ack()
+    sentry_sdk.logger.info(f"responding to trout whitelist from {body["user_id"]}")
+    target_id = body["channel_id"]
+    
+    members_response = client.conversations_members(channel=target_id)
+    member_ids = set(members_response["members"])
+
+    is_cm = False
+    if body["user_id"] not in member_ids:
+        is_cm = False
+    else:
+        user = client.users_info(user=body["user_id"])["user"]
+        is_cm = user.get("is_admin") or user.get("is_owner")
+
+    if is_cm or body["user_id"] == os.getenv("ADMIN_ID"):
+        try:
+            channel = BlacklistedChannel.get(channel=target_id)
+            channel.delete_instance()
+        except IntegrityError:
+            sentry_sdk.logger.info(f"not blacklisted {target_id}")
+            respond(f":trouted: *Whack!* It looks like you already blacklisted <#{target_id}> from getting Troutpheus notifications. To whitelist this channel, run `/trout-whitelist` in your channel.")
+            exit()
+        sentry_sdk.logger.info(f"whitelisting {target_id}")
+        respond(f":white_check_mark: You've successfully *whitelisted* <#{target_id}> from getting Troutpheus notifications. When members use Troutpheus commands here, her messages will be posted here as well.")
+    else:
+        sentry_sdk.logger.info(f"no permissions to whitelist the channel")
+        respond(f":trouted: *Whack!* You aren't the channel manager of <#{target_id}>, so you cannot whitelist Troutpheus from this channel. Ask a channel manager to whitelist the channel for you.")
+        exit()
+
 @app.action("unsub_button")
 def unsub(ack, body, say):
     ack()
