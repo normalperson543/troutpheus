@@ -64,7 +64,8 @@ username_pattern = r"^<@[UW][A-Z0-9]{8,11}(?:\|[a-z0-9._-]+)?>"
 username_pat = re.compile(username_pattern)
 
 def trout(actor_id, target_id, reason, client, respond, channel_id="", send_using_respond=True, actor_dm_id=""):
-    if actor in BLACKLIST_USERS:
+    if actor_id in BLACKLIST_USERS:
+        sentry_sdk.logger.info(f"{actor_id} is banned")
         respond("You have been banned from using Troutpheus due to abuse.")
         exit()
     if len(channel_id) > 0:
