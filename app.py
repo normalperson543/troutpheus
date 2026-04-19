@@ -68,7 +68,7 @@ TROUT_HELP = f"*:trouted: Troutpheus commands*\n\n`/trout @USER [REASON]` - Tell
 username_pattern = r"^<@[UW][A-Z0-9]{8,11}(?:\|[a-z0-9._-]+)?>"
 username_pat = re.compile(username_pattern)
 
-channel_id_pattern = r"^<@C[A-Z0-9]{8,11}(?:\|[a-z0-9._-]+)?>"
+channel_id_pattern = r"^C[A-Z0-9]{8,10}$>"
 channel_id_pat = re.compile(channel_id_pattern)
 
 def trout(actor_id, target_id, reason, client, respond, channel_id="", send_using_respond=True, actor_dm_id=""):
@@ -171,6 +171,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
             sentry_sdk.logger.warning("cannot send message to bot")
             
     if send_using_respond:
+        print(is_blacklisted(channel_id))
         respond(
             response_type="ephemeral" if is_blacklisted(channel_id) else "in_channel",
             text=f"Whack! {target.username} has been *whacked* by a wet trout :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\nReason: {reason}",
@@ -234,7 +235,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
     )
 
 def is_blacklisted(channel_id):
-    return BlacklistedChannel.select().where(BlacklistedChannel.channel == channel_id) > 0
+    return BlacklistedChannel.select().where(BlacklistedChannel.channel == channel_id).count() > 0
 @app.command("/trout")
 def respond_t(ack, command, body, respond, client):
     # Acknowledge command request
@@ -485,13 +486,14 @@ def respond_tul(ack, command, respond, body):
 def respond_blacklist(ack, respond, body, client):
     ack()
     target_id = body["channel_id"]
-    
-    if not re.match(channel_id_pat, target_id):
-        sentry_sdk.logger.info(f"attempted to trout {split_command[0]} but it is not a valid user")
-        respond("Unfortunately, Troutpheus cannot blacklist this at this time.")
+
+    try:
+        members_response = client.conversations_members(channel=target_id)
+    except SlackApiError:
+        sentry_sdk.logger.info(f"attempted to blacklist {target_id} but it is not a valid channel ID")
+        respond("Unfortunately, Troutpheus cannot blacklist this channel.")
         exit()
     
-    members_response = client.conversations_members(channel=target_id)
     member_ids = set(members_response["members"])
 
     
@@ -523,7 +525,13 @@ def respond_whitelist(ack, respond, body, client):
     sentry_sdk.logger.info(f"responding to trout whitelist from {body["user_id"]}")
     target_id = body["channel_id"]
     
-    members_response = client.conversations_members(channel=target_id)
+    try:
+        members_response = client.conversations_members(channel=target_id)
+    except SlackApiError:
+        sentry_sdk.logger.info(f"attempted to blacklist {target_id} but it is not a valid channel ID")
+        respond("Unfortunately, Troutpheus cannot blacklist this channel.")
+        exit()
+    
     member_ids = set(members_response["members"])
 
     is_cm = False
@@ -537,9 +545,9 @@ def respond_whitelist(ack, respond, body, client):
         try:
             channel = BlacklistedChannel.get(channel=target_id)
             channel.delete_instance()
-        except IntegrityError:
+        except BlacklistedChannel.DoesNotExist:
             sentry_sdk.logger.info(f"not blacklisted {target_id}")
-            respond(f":trouted: *Whack!* It looks like you already blacklisted <#{target_id}> from getting Troutpheus notifications. To whitelist this channel, run `/trout-whitelist` in your channel.")
+            respond(f":trouted: *Whack!* It looks like this channel has not been blacklisted, so I can't whitelist it. Did you mean to blacklist this channel? `/trout-blacklist`")
             exit()
         sentry_sdk.logger.info(f"whitelisting {target_id}")
         respond(f":white_check_mark: You've successfully *whitelisted* <#{target_id}> from getting Troutpheus notifications. When members use Troutpheus commands here, her messages will be posted here as well.")
