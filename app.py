@@ -507,7 +507,7 @@ def respond_blacklist(ack, respond, body, client, command):
         members_response = client.conversations_members(channel=target_id)
     except SlackApiError:
         sentry_sdk.logger.info(f"attempted to blacklist {target_id} but it is not a valid channel ID")
-        respond("Unfortunately, Troutpheus cannot blacklist this channel.")
+        respond("Troutpheus can't confirm you're a channel manager! Try adding Troutpheus to this channel, and rerun the command again.")
         exit()
     
     member_ids = set(members_response["members"])
@@ -557,7 +557,7 @@ def respond_whitelist(ack, respond, body, client, command):
         members_response = client.conversations_members(channel=target_id)
     except SlackApiError:
         sentry_sdk.logger.info(f"attempted to whitelist {target_id} but it is not a valid channel ID")
-        respond("Unfortunately, Troutpheus cannot whitelist this channel.")
+        respond("Troutpheus can't confirm you're a channel manager! Try adding Troutpheus to this channel, and rerun the command again.")
         exit()
     
     member_ids = set(members_response["members"])
