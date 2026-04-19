@@ -63,7 +63,7 @@ print("Creating tables")
 db.create_tables([Trout, User, BlacklistedChannel])
 print("Done")
 
-TROUT_HELP = f"*:trouted: Troutpheus commands*\n\n`/trout @USER [REASON]` - Tells the user they made a mistake\n`/trout-leaderboard` - Posts the top 10 trouted users and whackers\n`/trout-count @USER` - Posts how many times you got trouted and whacked others\n`/trout-user-logs @USER` - Posts the last 10 trouts of a user\n\nTrout logs: <#{os.getenv("TROUT_LOGS_CHANNEL")}>\nFor support, DM @normalperson543 or drop a message in that channel :p"
+TROUT_HELP = f"*:trouted: Troutpheus commands*\n\n`/trout @USER [REASON]` - Tells the user they made a mistake\n`/trout-leaderboard` - Posts the top 10 trouted users and whackers\n`/trout-count @USER` - Posts how many times you got trouted and whacked others\n`/trout-user-logs @USER` - Posts the last 10 trouts of a user\n`/trout-blacklist` - Blocks Troutpheus from sending messages into your channel (channel manager required)\n`/trout-whitelist` - Allows Troutpheus to send messages to your channels\n\nTrout logs: <#{os.getenv("TROUT_LOGS_CHANNEL")}>\nFor support, DM @normalperson543 or drop a message in that channel :p"
 
 username_pattern = r"^<@[UW][A-Z0-9]{8,11}(?:\|[a-z0-9._-]+)?>"
 username_pat = re.compile(username_pattern)
@@ -513,7 +513,7 @@ def respond_blacklist(ack, respond, body, client):
             respond(f":trouted: *Whack!* It looks like you already blacklisted <#{target_id}> from getting Troutpheus notifications. To whitelist this channel, run `/trout-whitelist` in your channel.")
             exit()
         sentry_sdk.logger.info(f"blacklisting {target_id}")
-        respond(f":red_x: You've successfully *blacklisted* <#{target_id}> from getting Troutpheus notifications. When members use Troutpheus commands here, they'll be sent as 'only visible to you' messages.")
+        respond(f":red_x: You've successfully *blacklisted* <#{target_id}> from getting Troutpheus notifications. When members use Troutpheus commands here, they'll be sent as 'only visible to you' messages.\nTo whitelist this channel, run `/trout-whitelist` in your channel.")
     else:
         sentry_sdk.logger.info(f"no permissions to blacklist the channel")
         respond(f":trouted: *Whack!* You aren't the channel manager of <#{target_id}>, so you cannot blacklist Troutpheus from this channel. Ask a channel manager to blacklist the channel for you.")
@@ -528,8 +528,8 @@ def respond_whitelist(ack, respond, body, client):
     try:
         members_response = client.conversations_members(channel=target_id)
     except SlackApiError:
-        sentry_sdk.logger.info(f"attempted to blacklist {target_id} but it is not a valid channel ID")
-        respond("Unfortunately, Troutpheus cannot blacklist this channel.")
+        sentry_sdk.logger.info(f"attempted to whitelist {target_id} but it is not a valid channel ID")
+        respond("Unfortunately, Troutpheus cannot whitelist this channel.")
         exit()
     
     member_ids = set(members_response["members"])
@@ -550,7 +550,7 @@ def respond_whitelist(ack, respond, body, client):
             respond(f":trouted: *Whack!* It looks like this channel has not been blacklisted, so I can't whitelist it. Did you mean to blacklist this channel? `/trout-blacklist`")
             exit()
         sentry_sdk.logger.info(f"whitelisting {target_id}")
-        respond(f":white_check_mark: You've successfully *whitelisted* <#{target_id}> from getting Troutpheus notifications. When members use Troutpheus commands here, her messages will be posted here as well.")
+        respond(f":white_check_mark: You've successfully *whitelisted* <#{target_id}> from getting Troutpheus notifications. When members use Troutpheus commands here, her messages will be posted here as well.\nTo blacklist this channel, run `/trout-blacklist` in your channel.")
     else:
         sentry_sdk.logger.info(f"no permissions to whitelist the channel")
         respond(f":trouted: *Whack!* You aren't the channel manager of <#{target_id}>, so you cannot whitelist Troutpheus from this channel. Ask a channel manager to whitelist the channel for you.")
