@@ -63,13 +63,13 @@ print("Creating tables")
 db.create_tables([Trout, User, BlacklistedChannel])
 print("Done")
 
-TROUT_HELP = f"*:trouted: Troutpheus commands*\n\n`/trout @USER [REASON]` - Tells the user they made a mistake\n`/trout-leaderboard` - Posts the top 10 trouted users and whackers\n`/trout-count @USER` - Posts how many times you got trouted and whacked others\n`/trout-user-logs @USER` - Posts the last 10 trouts of a user\n`/trout-blacklist` - Blocks Troutpheus from sending messages into your channel (channel manager required)\n`/trout-whitelist` - Allows Troutpheus to send messages to your channel (channel manager required)\n\nTrout logs: <#{os.getenv("TROUT_LOGS_CHANNEL")}>\nFor support, DM @normalperson543 or drop a message in that channel :p"
+TROUT_HELP = f"*:trouted: Troutpheus commands*\n\n`/trout @USER [REASON]` - Tells the user they made a mistake\n`/trout-leaderboard` - Posts the top 10 trouted users and whackers\n`/trout-count @USER` - Posts how many times you got trouted and whacked others\n`/trout-user-logs @USER` - Posts the last 10 trouts of a user\n`/trout-blacklist #[CHANNEL NAME]` - Blocks Troutpheus from sending messages into your channel (channel manager required)\n`/trout-whitelist #[CHANNEL NAME]` - Allows Troutpheus to send messages to your channel (channel manager required)\n\nTrout logs: <#{os.getenv("TROUT_LOGS_CHANNEL")}>\nFor support, DM @normalperson543 or drop a message in that channel :p"
 BLACKLIST_USERS = os.getenv("BLACKLIST_USERS").split(",")
 
 username_pattern = r"^<@[UW][A-Z0-9]{8,11}(?:\|[a-z0-9._-]+)?>"
 username_pat = re.compile(username_pattern)
 
-channel_id_pattern = r"^C[A-Z0-9]{8,10}$>"
+channel_id_pattern = r"^<#(C[A-Z0-9]{8,10})\|([a-z0-9_-]+)>$"
 channel_id_pat = re.compile(channel_id_pattern)
 
 def trout(actor_id, target_id, reason, client, respond, channel_id="", send_using_respond=True, actor_dm_id=""):
@@ -488,9 +488,17 @@ def respond_tul(ack, command, respond, body):
         unfurl_links=False
     )
 @app.command("/trout-blacklist")
-def respond_blacklist(ack, respond, body, client):
+def respond_blacklist(ack, respond, body, client, command):
     ack()
-    target_id = body["channel_id"]
+    sentry_sdk.logger.info(f"responding to trout blacklist from {body["user_id"]}")
+    split_command = command["text"].split(" ")
+    if not re.match(channel_id_pat, split_command[0]):
+        sentry_sdk.logger.info(f"attempted to blacklist {body["channel_id"]} but it is not valid")
+        respond(":trouted: *Whack!* The channel you tried to blacklist isn't valid. The correct syntax is `/trout-blacklist #[CHANNEL NAME]`.")
+        exit()
+    target_id = split_command[0][2:]
+    target_id = target_id[:target_id.index("|")]
+    sentry_sdk.logger.info(f"identified the blacklist req for {target_id}")
 
     try:
         members_response = client.conversations_members(channel=target_id)
@@ -515,20 +523,28 @@ def respond_blacklist(ack, respond, body, client):
             BlacklistedChannel.create(channel=target_id)
         except IntegrityError:
             sentry_sdk.logger.info(f"already blacklisted {target_id}")
-            respond(f":trouted: *Whack!* It looks like you already blacklisted <#{target_id}> from getting Troutpheus notifications. To whitelist this channel, run `/trout-whitelist` in your channel.")
+            respond(f":trouted: *Whack!* It looks like you already blacklisted <#{target_id}> from getting Troutpheus notifications. To whitelist this channel, run `/trout-whitelist <#{target_id}>` in your channel.")
             exit()
         sentry_sdk.logger.info(f"blacklisting {target_id}")
-        respond(f":red_x: You've successfully *blacklisted* <#{target_id}> from getting Troutpheus notifications. When members use Troutpheus commands here, they'll be sent as 'only visible to you' messages.\nTo whitelist this channel, run `/trout-whitelist` in your channel.")
+        respond(f":red_x: You've successfully *blacklisted* <#{target_id}> from getting Troutpheus notifications. When members use Troutpheus commands here, they'll be sent as 'only visible to you' messages.\nTo whitelist this channel, run `/trout-whitelist <#{target_id}>` in your channel.")
     else:
         sentry_sdk.logger.info(f"no permissions to blacklist the channel")
         respond(f":trouted: *Whack!* You aren't the channel manager of <#{target_id}>, so you cannot blacklist Troutpheus from this channel. Ask a channel manager to blacklist the channel for you.")
         exit()
 
 @app.command("/trout-whitelist")
-def respond_whitelist(ack, respond, body, client):
+def respond_whitelist(ack, respond, body, client, command):
     ack()
     sentry_sdk.logger.info(f"responding to trout whitelist from {body["user_id"]}")
-    target_id = body["channel_id"]
+
+    split_command = command["text"].split(" ")
+    if not re.match(channel_id_pat, split_command[0]):
+        sentry_sdk.logger.info(f"attempted to blacklist {body["channel_id"]} but it is not valid")
+        respond(":trouted: *Whack!* The channel you tried to blacklist isn't valid. The correct syntax is `/trout-blacklist #[CHANNEL NAME]`.")
+        exit()
+    target_id = split_command[0][2:]
+    target_id = target_id[:target_id.index("|")]
+    sentry_sdk.logger.info(f"identified the blacklist req for {target_id}")
     
     try:
         members_response = client.conversations_members(channel=target_id)
@@ -552,10 +568,10 @@ def respond_whitelist(ack, respond, body, client):
             channel.delete_instance()
         except BlacklistedChannel.DoesNotExist:
             sentry_sdk.logger.info(f"not blacklisted {target_id}")
-            respond(f":trouted: *Whack!* It looks like this channel has not been blacklisted, so I can't whitelist it. Did you mean to blacklist this channel? `/trout-blacklist`")
+            respond(f":trouted: *Whack!* It looks like this channel has not been blacklisted, so I can't whitelist it. Did you mean to blacklist this channel? `/trout-blacklist <#{target_id}>`")
             exit()
         sentry_sdk.logger.info(f"whitelisting {target_id}")
-        respond(f":white_check_mark: You've successfully *whitelisted* <#{target_id}> from getting Troutpheus notifications. When members use Troutpheus commands here, her messages will be posted here as well.\nTo blacklist this channel, run `/trout-blacklist` in your channel.")
+        respond(f":white_check_mark: You've successfully *whitelisted* <#{target_id}> from getting Troutpheus notifications. When members use Troutpheus commands here, her messages will be posted here as well.\nTo blacklist this channel, run `/trout-blacklist <#{target_id}>` in your channel.")
     else:
         sentry_sdk.logger.info(f"no permissions to whitelist the channel")
         respond(f":trouted: *Whack!* You aren't the channel manager of <#{target_id}>, so you cannot whitelist Troutpheus from this channel. Ask a channel manager to whitelist the channel for you.")
