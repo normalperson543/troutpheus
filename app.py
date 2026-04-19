@@ -69,7 +69,7 @@ BLACKLIST_USERS = os.getenv("BLACKLIST_USERS").split(",")
 username_pattern = r"^<@[UW][A-Z0-9]{8,11}(?:\|[a-z0-9._-]+)?>"
 username_pat = re.compile(username_pattern)
 
-channel_id_pattern = r"^<#([A-Z][A-Z0-9]{8,10})(\|[a-z0-9_-]+)?>$"
+channel_id_pattern = r"^<#([C][A-Z0-9]{8,10})(\|[a-z0-9_-]+)?>$"
 channel_id_pat = re.compile(channel_id_pattern)
 
 def trout(actor_id, target_id, reason, client, respond, channel_id="", send_using_respond=True, actor_dm_id=""):
@@ -497,7 +497,10 @@ def respond_blacklist(ack, respond, body, client, command):
         respond(":trouted: *Whack!* The channel you tried to blacklist isn't valid. The correct syntax is `/trout-blacklist #[CHANNEL NAME]`.")
         exit()
     target_id = split_command[0][2:]
-    target_id = target_id[:target_id.index("|")]
+    try:
+        target_id = target_id[:target_id.index("|")]
+    except ValueError:
+         target_id = target_id[:target_id.index(">")]
     sentry_sdk.logger.info(f"identified the blacklist req for {target_id}")
 
     try:
@@ -543,7 +546,11 @@ def respond_whitelist(ack, respond, body, client, command):
         respond(":trouted: *Whack!* The channel you tried to blacklist isn't valid. The correct syntax is `/trout-blacklist #[CHANNEL NAME]`.")
         exit()
     target_id = split_command[0][2:]
-    target_id = target_id[:target_id.index("|")]
+    try:
+        target_id = target_id[:target_id.index("|")]
+    except ValueError:
+         target_id = target_id[:target_id.index(">")]
+        
     sentry_sdk.logger.info(f"identified the blacklist req for {target_id}")
     
     try:
