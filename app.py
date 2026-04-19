@@ -63,7 +63,7 @@ print("Creating tables")
 db.create_tables([Trout, User, BlacklistedChannel])
 print("Done")
 
-TROUT_HELP = f"*:trouted: Troutpheus commands*\n\n`/trout @USER [REASON]` - Tells the user they made a mistake\n`/trout-leaderboard` - Posts the top 10 trouted users and whackers\n`/trout-count @USER` - Posts how many times you got trouted and whacked others\n`/trout-user-logs @USER` - Posts the last 10 trouts of a user\n`/trout-blacklist` - Blocks Troutpheus from sending messages into your channel (channel manager required)\n`/trout-whitelist` - Allows Troutpheus to send messages to your channels\n\nTrout logs: <#{os.getenv("TROUT_LOGS_CHANNEL")}>\nFor support, DM @normalperson543 or drop a message in that channel :p"
+TROUT_HELP = f"*:trouted: Troutpheus commands*\n\n`/trout @USER [REASON]` - Tells the user they made a mistake\n`/trout-leaderboard` - Posts the top 10 trouted users and whackers\n`/trout-count @USER` - Posts how many times you got trouted and whacked others\n`/trout-user-logs @USER` - Posts the last 10 trouts of a user\n`/trout-blacklist` - Blocks Troutpheus from sending messages into your channel (channel manager required)\n`/trout-whitelist` - Allows Troutpheus to send messages to your channel (channel manager required)\n\nTrout logs: <#{os.getenv("TROUT_LOGS_CHANNEL")}>\nFor support, DM @normalperson543 or drop a message in that channel :p"
 
 username_pattern = r"^<@[UW][A-Z0-9]{8,11}(?:\|[a-z0-9._-]+)?>"
 username_pat = re.compile(username_pattern)
