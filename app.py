@@ -64,6 +64,7 @@ db.create_tables([Trout, User, BlacklistedChannel])
 print("Done")
 
 TROUT_HELP = f"*:trouted: Troutpheus commands*\n\n`/trout @USER [REASON]` - Tells the user they made a mistake\n`/trout-leaderboard` - Posts the top 10 trouted users and whackers\n`/trout-count @USER` - Posts how many times you got trouted and whacked others\n`/trout-user-logs @USER` - Posts the last 10 trouts of a user\n`/trout-blacklist` - Blocks Troutpheus from sending messages into your channel (channel manager required)\n`/trout-whitelist` - Allows Troutpheus to send messages to your channel (channel manager required)\n\nTrout logs: <#{os.getenv("TROUT_LOGS_CHANNEL")}>\nFor support, DM @normalperson543 or drop a message in that channel :p"
+BLACKLIST_USERS = os.getenv("BLACKLIST_USERS").split(",")
 
 username_pattern = r"^<@[UW][A-Z0-9]{8,11}(?:\|[a-z0-9._-]+)?>"
 username_pat = re.compile(username_pattern)
@@ -72,6 +73,10 @@ channel_id_pattern = r"^C[A-Z0-9]{8,10}$>"
 channel_id_pat = re.compile(channel_id_pattern)
 
 def trout(actor_id, target_id, reason, client, respond, channel_id="", send_using_respond=True, actor_dm_id=""):
+    if actor_id in BLACKLIST_USERS:
+        sentry_sdk.logger.info(f"{actor_id} is banned")
+        respond("You have been banned from using Troutpheus due to abuse.")
+        exit()
     if len(channel_id) > 0:
         sentry_sdk.logger.info(f"target {target_id} trouted by actor {actor_id} in {channel_id}")
     else:
