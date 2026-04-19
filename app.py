@@ -526,7 +526,7 @@ def respond_blacklist(ack, respond, body, client, command):
             respond(f":trouted: *Whack!* It looks like you already blacklisted <#{target_id}> from getting Troutpheus notifications. To whitelist this channel, run `/trout-whitelist <#{target_id}>` in your channel.")
             exit()
         sentry_sdk.logger.info(f"blacklisting {target_id}")
-        respond(f":red_x: You've successfully *blacklisted* <#{target_id}> from getting Troutpheus notifications. When members use Troutpheus commands here, they'll be sent as 'only visible to you' messages.\nTo whitelist this channel, run `/trout-whitelist <#{target_id}>` in your channel.")
+        respond(f":red-x: You've successfully *blacklisted* <#{target_id}> from getting Troutpheus notifications. When members use Troutpheus commands here, they'll be sent as 'only visible to you' messages.\nTo whitelist this channel, run `/trout-whitelist <#{target_id}>` in your channel.")
     else:
         sentry_sdk.logger.info(f"no permissions to blacklist the channel")
         respond(f":trouted: *Whack!* You aren't the channel manager of <#{target_id}>, so you cannot blacklist Troutpheus from this channel. Ask a channel manager to blacklist the channel for you.")
