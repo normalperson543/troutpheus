@@ -69,7 +69,7 @@ BLACKLIST_USERS = os.getenv("BLACKLIST_USERS").split(",")
 username_pattern = r"^<@[UW][A-Z0-9]{8,11}(?:\|[a-z0-9._-]+)?>"
 username_pat = re.compile(username_pattern)
 
-channel_id_pattern = r"^<#(C[A-Z0-9]{8,11})\|([a-z0-9_-]+)>$"
+channel_id_pattern = r"^<#([A-Z][A-Z0-9]{8,10})(\|[a-z0-9_-]+)?>$"
 channel_id_pat = re.compile(channel_id_pattern)
 
 def trout(actor_id, target_id, reason, client, respond, channel_id="", send_using_respond=True, actor_dm_id=""):
