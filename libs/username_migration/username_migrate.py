@@ -39,7 +39,12 @@ users = User.select()
 for user in users:
     print(f"Getting info for {user.user_id}")
     slack_user = client.users_info(user=user.user_id)
-    print(f"Real name is {slack_user["user"]["real_name"]}")
-    user.username = slack_user["user"]["real_name"]
-    user.save()
+    try:
+      real_name = slack_user["user"]["real_name"]
+      print(f"Real name is {real_name}")
+      user.username = slack_user["user"]["real_name"]
+      user.save()
+    except KeyError:
+      print(f"Could not find the real name for {user.user_id}")
+      print(slack_user["user"])
     time.sleep(2)
