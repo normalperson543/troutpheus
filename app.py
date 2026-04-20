@@ -24,7 +24,6 @@ sentry_sdk.init(
 # Initializes your app with your bot token and socket mode handler
 sentry_sdk.logger.info("starting bot")
 app = App(token=os.getenv("SLACK_BOT_TOKEN"))
-COMMIT_ID = os.getenv("SOURCE_COMMIT")
 
 db = PostgresqlExtDatabase(os.getenv("DATABASE_URL"))
 
@@ -77,6 +76,27 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
         sentry_sdk.logger.info(f"{actor_id} is banned")
         respond("You have been banned from using Troutpheus due to abuse.")
         exit()
+    
+    last_actor_trout = Trout.select().where(Trout.actor == actor_id).order_by(Trout.timestamp.desc()).first()
+    current_time = datetime.datetime.now()
+    
+    if last_actor_trout:
+        time_difference = current_time - last_actor_trout.timestamp
+        time_difference_seconds = time_difference.total_seconds()
+        if time_difference_seconds < float(os.getenv("ACTOR_RATE_LIMIT")):
+            sentry_sdk.logger.warning(f"{actor_id} encountered an actor rate limit ({time_difference_seconds} seconds)")
+            respond(f":trouted: *Whack!* It looks like you need to slow down between trouting people. Please wait some time, then whack <@{target_id}> again.\nHere's the reason that you whacked them:```{reason}```")
+            exit()
+
+    last_target_trout = Trout.select().where(Trout.target == target_id).order_by(Trout.timestamp.desc()).first()
+    if last_target_trout:
+        time_difference = current_time - last_target_trout.timestamp
+        time_difference_seconds = time_difference.total_seconds()
+        if time_difference_seconds < float(os.getenv("TARGET_RATE_LIMIT")):
+            sentry_sdk.logger.warning(f"{actor_id} encountered a target rate limit ({time_difference_seconds} seconds)")
+            respond(f":trouted: *Whack!* It looks like <@{target_id}> has been trouted relatively recently! Please wait some time, then whack them again.\nHere's the reason that you whacked them:```{reason}```")
+            exit()
+
     if len(channel_id) > 0:
         sentry_sdk.logger.info(f"target {target_id} trouted by actor {actor_id} in {channel_id}")
     else:
@@ -96,14 +116,14 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
     actor, created_actor = User.get_or_create(user_id=actor_id)
     if len(actor.username) == 0:
         slack_user = client.users_info(user=actor_id)
-        actor.username = slack_user["user"]["name"]
+        actor.username = slack_user["user"]["real_name"]
         sentry_sdk.logger.info(f"actor new username: {actor.user_id} --> {actor.username}")
     
 
     target, created_target = User.get_or_create(user_id=target_id)
     if len(target.username) == 0:
         slack_user = client.users_info(user=target_id)
-        target.username = slack_user["user"]["name"]
+        target.username = slack_user["user"]["real_name"]
         sentry_sdk.logger.info(f"target new username: {target.user_id} --> {target.username}")
     
     actor.trouter_count += 1
@@ -176,7 +196,6 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
             sentry_sdk.logger.warning("cannot send message to bot")
             
     if send_using_respond:
-        print(is_blacklisted(channel_id))
         respond(
             response_type="ephemeral" if is_blacklisted(channel_id) else "in_channel",
             text=f"Whack! {target.username} has been *whacked* by a wet trout :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\nReason: {reason}",
@@ -185,7 +204,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"*Whack!* *@{target.username}* (:trouted:{target.trouted_count}) has been *whacked* by a wet trout :3\n\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\n>{reason}"
+                        "text": f"*Whack!* <@{target.user_id}> (:trouted:{target.trouted_count}) has been *whacked* by a wet trout :3\n\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\n>{reason}"
                     },
                     "accessory": {
                         "type": "image",
@@ -198,7 +217,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
                     "elements": [
                         {
                             "type": "mrkdwn",
-                            "text": f"whacker: *@{actor.username}* (:trouted:{actor.trouted_count}) | `/trout @[USER] [REASON]` | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
+                            "text": f"whacker: <@{actor.user_id}> (:trouted:{actor.trouted_count}) | `/trout @[USER] [REASON]` | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
                         }
                     ]
                 }
@@ -213,7 +232,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"*Whack!* You *whacked* *@{target.username}* (:trouted:{target.trouted_count}) by a wet trout :3\n>{reason}"
+                        "text": f"*Whack!* You *whacked* <@{target.user_id}> (:trouted:{target.trouted_count}) by a wet trout :3\n>{reason}"
                     },
                     "accessory": {
                         "type": "image",
@@ -226,7 +245,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
                     "elements": [
                         {
                             "type": "mrkdwn",
-                            "text": f"whacker: *@{actor.username}* (:trouted:{actor.trouted_count}) | `/trout @[USER] [REASON]` | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
+                            "text": f"whacker: <@{actor.user_id}> (:trouted:{actor.trouted_count}) | `/trout @[USER] [REASON]` | <#{os.getenv("TROUT_LOGS_CHANNEL")}>"
                         }
                     ]
                 }
