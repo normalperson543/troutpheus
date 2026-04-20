@@ -85,7 +85,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
         time_difference_seconds = time_difference.total_seconds()
         if time_difference_seconds < float(os.getenv("ACTOR_RATE_LIMIT")):
             sentry_sdk.logger.warning(f"{actor_id} encountered an actor rate limit ({time_difference_seconds} seconds)")
-            respond(f":trouted: *Whack!* It looks like you need to slow down between trouting people. Please wait some time, then whack them again.\nHere's the reason that you whacked them:```{reason}```")
+            respond(f":trouted: *Whack!* It looks like you need to slow down between trouting people. Please wait some time, then whack <@{target_id}> again.\nHere's the reason that you whacked them:```{reason}```")
             exit()
 
     last_target_trout = Trout.select().where(Trout.target == target_id).order_by(Trout.timestamp.desc()).first()
@@ -94,7 +94,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
         time_difference_seconds = time_difference.total_seconds()
         if time_difference_seconds < float(os.getenv("TARGET_RATE_LIMIT")):
             sentry_sdk.logger.warning(f"{actor_id} encountered a target rate limit ({time_difference_seconds} seconds)")
-            respond(f":trouted: *Whack!* It looks like this person has been trouted relatively recently! Please wait some time, then whack them again.\nHere's the reason that you whacked them:```{reason}```")
+            respond(f":trouted: *Whack!* It looks like <@{target_id}> has been trouted relatively recently! Please wait some time, then whack them again.\nHere's the reason that you whacked them:```{reason}```")
             exit()
 
     if len(channel_id) > 0:
