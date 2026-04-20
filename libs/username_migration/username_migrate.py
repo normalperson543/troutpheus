@@ -22,7 +22,6 @@ class BaseModel(Model):
 class User(BaseModel):
     id = AutoField()
     username = TextField(default="")
-    real_name = TextField(default="")
     user_id = TextField(unique=True)
     trouted_count = IntegerField(default=0)
     trouter_count = IntegerField(default=0)
