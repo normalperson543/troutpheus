@@ -24,7 +24,6 @@ sentry_sdk.init(
 # Initializes your app with your bot token and socket mode handler
 sentry_sdk.logger.info("starting bot")
 app = App(token=os.getenv("SLACK_BOT_TOKEN"))
-COMMIT_ID = os.getenv("SOURCE_COMMIT")
 
 db = PostgresqlExtDatabase(os.getenv("DATABASE_URL"))
 
@@ -96,14 +95,14 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
     actor, created_actor = User.get_or_create(user_id=actor_id)
     if len(actor.username) == 0:
         slack_user = client.users_info(user=actor_id)
-        actor.username = slack_user["user"]["name"]
+        actor.username = slack_user["user"]["real_name"]
         sentry_sdk.logger.info(f"actor new username: {actor.user_id} --> {actor.username}")
     
 
     target, created_target = User.get_or_create(user_id=target_id)
     if len(target.username) == 0:
         slack_user = client.users_info(user=target_id)
-        target.username = slack_user["user"]["name"]
+        target.username = slack_user["user"]["real_name"]
         sentry_sdk.logger.info(f"target new username: {target.user_id} --> {target.username}")
     
     actor.trouter_count += 1
