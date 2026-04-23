@@ -551,14 +551,10 @@ def respond_blacklist(ack, respond, body, client, command):
 
     
 
-    is_cm = False
-    if body["user_id"] not in member_ids:
-        is_cm = False
-    else:
-        user = client.users_info(user=body["user_id"])["user"]
-        is_cm = user.get("is_admin") or user.get("is_owner")
+    channel_info = client.conversations_info(channel=body["channel_id"])["channel"]
+    is_channel_creator = channel_info.get("creator") == body["user_id"]
 
-    if is_cm or body["user_id"] == os.getenv("ADMIN_ID"):
+    if is_channel_creator or body["user_id"] == os.getenv("ADMIN_ID"):
         try:
             BlacklistedChannel.create(channel=target_id)
         except IntegrityError:
