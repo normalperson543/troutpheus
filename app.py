@@ -547,10 +547,6 @@ def respond_blacklist(ack, respond, body, client, command):
         respond("Troutpheus can't confirm you're a channel manager! Try adding Troutpheus to this channel, and rerun the command again.")
         exit()
     
-    member_ids = set(members_response["members"])
-
-    
-
     channel_info = client.conversations_info(channel=body["channel_id"])["channel"]
     is_channel_creator = channel_info.get("creator") == body["user_id"]
 
@@ -593,16 +589,10 @@ def respond_whitelist(ack, respond, body, client, command):
         respond("Troutpheus can't confirm you're a channel manager! Try adding Troutpheus to this channel, and rerun the command again.")
         exit()
     
-    member_ids = set(members_response["members"])
+    channel_info = client.conversations_info(channel=body["channel_id"])["channel"]
+    is_channel_creator = channel_info.get("creator") == body["user_id"]
 
-    is_cm = False
-    if body["user_id"] not in member_ids:
-        is_cm = False
-    else:
-        user = client.users_info(user=body["user_id"])["user"]
-        is_cm = user.get("is_admin") or user.get("is_owner")
-
-    if is_cm or body["user_id"] == os.getenv("ADMIN_ID"):
+    if is_channel_creator or body["user_id"] == os.getenv("ADMIN_ID"):
         try:
             channel = BlacklistedChannel.get(channel=target_id)
             channel.delete_instance()
