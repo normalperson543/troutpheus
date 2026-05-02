@@ -14,7 +14,16 @@ Then, run the `app.py` script:
 You can run the above as a quick way to deploy the app, or you can build the docker image.
 
 To do this, run the following:
+
 ```docker build -t normalperson543/troutpheus .```
 
 Then create and run a container:
+
 ```docker run -d normalperson543/troutpheus```
+
+## Username migration
+This will go through each user in the database, query the slack api for their real name, and replace the username on the database with their real name. This was used by me to switch from pulling the Slack username to their real name as listed on their profile.
+
+Run the following script in the `libs/username_migration` folder to do this:
+
+```python3 username_migrate.py```
