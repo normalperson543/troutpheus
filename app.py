@@ -212,7 +212,9 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
             )
         except SlackApiError:
             sentry_sdk.logger.warning("cannot send message to bot")
-            
+    START_STRING = f"*Whack!* <@{target.user_id}> (:trouted:{target.trouted_count}) has been *whacked* by a wet trout"
+    if "meow" in reason or "mrow" in reason or "nya" in reason or "mew" in reason:
+        START_STRING = f"w-w-*Whack!* u-u-uh <@{target.user_id}> (:trouted:{target.trouted_count}) h-has been *whacked* by a wet TWOUT :hehe: >w< meow mrrp nya!!"
     if send_using_respond:
         respond(
             response_type="ephemeral" if is_blacklisted(channel_id) else "in_channel",
@@ -222,7 +224,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"*Whack!* <@{target.user_id}> (:trouted:{target.trouted_count}) has been *whacked* by a wet trout :3\n\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\n>{reason}"
+                        "text": f"{START_STRING} :3\n\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\n>{reason}"
                     },
                     "accessory": {
                         "type": "image",
@@ -250,7 +252,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"*Whack!* You *whacked* <@{target.user_id}> (:trouted:{target.trouted_count}) by a wet trout :3\n>{reason}"
+                        "text": f"*Whack!* You *whacked* <@{target.user_id}> (:trouted:{target.trouted_count}) with a wet trout :3\n>{reason}"
                     },
                     "accessory": {
                         "type": "image",
