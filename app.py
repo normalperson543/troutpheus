@@ -218,7 +218,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
     if send_using_respond:
         respond(
             response_type="ephemeral" if is_blacklisted(channel_id) else "in_channel",
-            text=f"Whack! {target.username} has been *whacked* by a wet trout :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\nReason: {reason}",
+            text=f"Whack! <@{target.user_id}> has been *whacked* by a wet trout :3\n\nDon't take this too seriously. Someone just wants to let you know that you did something silly.\nReason: {reason}",
             blocks=[
                 {
                     "type": "section",
@@ -246,7 +246,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
     else:
         client.chat_postMessage(
             channel=actor_dm_id,
-            text=f"You whacked {target.username} with a wet trout :3 Reason: {reason}",
+            text=f"You whacked <@{target.user_id}> with a wet trout :3 Reason: {reason}",
             blocks=[
                 {
                     "type": "section",
@@ -274,7 +274,7 @@ def trout(actor_id, target_id, reason, client, respond, channel_id="", send_usin
 
     client.chat_postMessage(
         channel=os.getenv("TROUT_LOGS_CHANNEL"),
-        text=f":siren1: *{target.username}* ({target.user_id}) (:trouted:{target.trouted_count}) was *whacked* by *{actor.username}* ({actor.user_id}) (:trouted:{actor.trouted_count}) with a wet trout\n\n>{reason}",
+        text=f":siren1: <@{target.user_id}> (:trouted:{target.trouted_count}) was *whacked* by <@{actor.user_id}> (:trouted:{actor.trouted_count}) with a wet trout\n\n>{reason}",
         unfurl_links=False
     )
 
@@ -331,12 +331,12 @@ def respond_tl(ack, body, respond):
     out = "*:trouted: Top Trouted*\n"
     index = 1
     for user in User.select().order_by(User.trouted_count.desc()).limit(10):
-        out += f"{index}. *{user.username}* ({user.user_id}) - `{user.trouted_count}`\n"
+        out += f"{index}. <@{user.user_id}> - `{user.trouted_count}`\n"
         index += 1
     out += "\n*:trouted: Top Whackers*\n"
     index = 1
     for user in User.select().order_by(User.trouter_count.desc()).limit(10):
-        out += f"{index}. *{user.username}* ({user.user_id}) - `{user.trouter_count}`\n"
+        out += f"{index}. <@{user.user_id}> - `{user.trouter_count}`\n"
         index += 1
     
     respond(
@@ -390,7 +390,7 @@ def respond_tc(ack, respond, body, command):
         exit()
     respond(
         response_type="ephemeral" if is_blacklisted(body["channel_id"]) else "in_channel",
-        text = f":trouted: *{received_user.username}* ({received_user.user_id}) has been trouted `{received_user.trouted_count}` times and trouted others `{received_user.trouter_count}` times."
+        text = f":trouted: <@{received_user.user_id}> has been trouted `{received_user.trouted_count}` times and trouted others `{received_user.trouter_count}` times."
     )
 
 
